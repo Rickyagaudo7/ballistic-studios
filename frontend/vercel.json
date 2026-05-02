@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/games/:game",
+      "destination": "/games/:game/swipe-god/index.html"
+    }
+  ]
+}
