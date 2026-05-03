@@ -3,25 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <title>Swipe God</title>
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7708023438338001"
-     crossorigin="anonymous"></script>
-  <style>
-    
-    body {
-      margin: 0;
-      overflow: hidden;
-      background: black;
-    }
-    canvas {
-      display: block;
-    }
-  </style>
-</head>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Swipe God</title>
+
+  <!-- ADSENSE SCRIPT (LOAD ONCE) -->
+  <script async
+    src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7708023438338001"
+    crossorigin="anonymous"></script>
 
   <style>
     body {
@@ -62,21 +48,24 @@
       background: #00ffcc;
       color: black;
       cursor: pointer;
-      box-shadow: 0 0 20px #00ffcc;
     }
 
-    #menu button:hover {
-      transform: scale(1.05);
+    /* GAME CANVAS LAYER */
+    #gameCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
     }
 
-    /* AD BANNER */
+    /* BOTTOM AD */
     #ad-container {
       position: fixed;
       bottom: 0;
       width: 100%;
       text-align: center;
       background: rgba(0,0,0,0.6);
-      z-index: 1000;
+      z-index: 10000;
     }
   </style>
 </head>
@@ -92,35 +81,36 @@
 <!-- GAME CANVAS -->
 <canvas id="gameCanvas"></canvas>
 
-<!-- BOTTOM AD -->
+<!-- AD BANNER (BOTTOM FIXED) -->
 <div id="ad-container">
-  
+
   <ins class="adsbygoogle"
        style="display:block"
        data-ad-client="ca-pub-7708023438338001"
-       data-ad-slot="2222222222"
-       data-ad-format="auto"></ins>
+       data-ad-slot="9146349585"
+       data-ad-format="auto"
+       data-full-width-responsive="true"></ins>
 
-  <script>
-    (adsbygoogle = window.adsbygoogle || []).push({});
-  </script>
 </div>
 
+<!-- PUSH ADS AFTER ELEMENT EXISTS -->
+<script>
+  (adsbygoogle = window.adsbygoogle || []).push({});
+</script>
+
+<!-- GAME SCRIPT -->
 <script src="game.js"></script>
 
+<!-- MENU LOGIC -->
 <script>
-  // prevent auto start
   let gameStarted = false;
 
   function startGame() {
     document.getElementById("menu").style.display = "none";
     gameStarted = true;
-
-
   }
 
-  // block canvas interaction until start
-  document.addEventListener("DOMContentLoaded", () => {
+  window.addEventListener("DOMContentLoaded", () => {
     const canvas = document.getElementById("gameCanvas");
 
     canvas.addEventListener("pointerdown", e => {
@@ -128,34 +118,6 @@
     });
   });
 </script>
-
-</body>
-</html>
-<!-- BOTTOM BANNER AD -->
-<div id="ad-container" style="
-  position: fixed;
-  bottom: 0;
-  width: 100%;
-  text-align: center;
-  background: rgba(0,0,0,0.6);
-">
- 
-
-  <ins class="adsbygoogle"
-       style="display:block"
-       data-ad-client="ca-pub-7708023438338001"
-       data-ad-slot="2222222222"
-       data-ad-format="auto"></ins>
-
-  <script>
-     
-  </script>
-</div>
-<body>
-
-<canvas id="gameCanvas"></canvas>
-
-<script src="game.js"></script>
 
 </body>
 </html>

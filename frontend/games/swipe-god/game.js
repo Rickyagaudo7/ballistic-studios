@@ -530,6 +530,7 @@ canvas.addEventListener("pointermove", e => {
 
 canvas.addEventListener("pointerup", async e => {
   if (!tracing || cpuPlaying) return;
+
   tracing = false;
 
   timerRunning = false;
@@ -550,22 +551,25 @@ canvas.addEventListener("pointerup", async e => {
 
     completedStreakLines[completedStreakLines.length - 1].fadeStart = Date.now();
 
-currentLevel++;
-if (currentLevel > maxLines) currentLevel = maxLines;
-sequence = fullSequence.slice(0, currentLevel + 1);
+    currentLevel++;
+    if (currentLevel > maxLines) currentLevel = maxLines;
+    sequence = fullSequence.slice(0, currentLevel + 1);
 
-// SHOW AD BETWEEN LEVELS
-setTimeout(() => {
-  showInterstitialAd();
+   setTimeout(() => {
+  drawBackground(); // instead of clearing to black
 
-  // start next level AFTER ad finishes
+  ctx.font = "40px Arial";
+  ctx.fillStyle = "#00ffcc";
+  ctx.textAlign = "center";
+  ctx.fillText("Next Level...", canvas.width / 2, canvas.height / 2);
+
   setTimeout(() => {
     cpuAnimateDraw();
-  }, 2000); // same as ad duration
+  }, 1500);
+
 }, 300);
   }
 });
-
 async function animateShimmer() {
   const steps = 60;
   const interval = 20;
@@ -654,6 +658,7 @@ function showInterstitialAd(callback) {
 
     // THIS is the important part
     if (callback) callback();
-let gamePaused = false;
+
   }, 2000);
 }
+init();
