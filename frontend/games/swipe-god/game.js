@@ -657,4 +657,3 @@ function showInterstitialAd(callback) {
 let gamePaused = false;
   }, 2000);
 }
-init();
