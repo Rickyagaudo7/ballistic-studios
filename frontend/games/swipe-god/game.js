@@ -23,9 +23,11 @@ let cpuPlaying = true;
 let userTrace = [];
 let tracing = false;
 
+
 let animationProgress = 0;
 let animationSpeed = 0.004; // slower fixed speed for animation
-
+let shakeTime = 0;
+let shakeStrength = 0;
 let timerStart = 0;
 let timerRunning = false;
 let timerId = null;
@@ -41,6 +43,25 @@ let completedStreakLines = []; // { points, color, fadeStart, fadeProgress }
 let glowAnimating = false;
 let glowProgress = 0;
 const glowSpeed = 0.008;
+
+function triggerShake(strength = 12, duration = 300) {
+  shakeStrength = strength;
+  shakeTime = duration;
+}
+
+function getShakeOffset() {
+  if (shakeTime > 0) {
+    shakeTime -= 16;
+
+    return {
+      x: (Math.random() - 0.5) * shakeStrength,
+      y: (Math.random() - 0.5) * shakeStrength
+    };
+  }
+
+  return { x: 0, y: 0 };
+}
+
 
 function getStreakColor(s) {
   if (s >= 10) return "rgba(255,0,255,0.9)";       // Magenta
@@ -339,6 +360,10 @@ function cpuAnimateDraw() {
 
   function step() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const shake = getShakeOffset();
+ctx.save();
+ctx.translate(shake.x, shake.y);
+
     drawBackground();
     drawStreakLines();
 
@@ -356,10 +381,14 @@ function cpuAnimateDraw() {
       requestAnimationFrame(step);
     } else {
       cpuPlaying = false;
+      setTimeout(() => {
+  cpuPlaying = false; // now player can interact
+}, 200);
       animationProgress = 1;
       glowAnimating = true;
       glowProgress = 0;
       animateGlowAlongLine();
+      ctx.restore();
     }
   }
   step();
@@ -633,32 +662,7 @@ function init() {
   fullSequence = generateSequence(maxLines);
   sequence = fullSequence.slice(0, currentLevel + 1);
 
+  cpuPlaying = true; // CPU is playing animation first
+
   cpuAnimateDraw();
 }
-function showInterstitialAd(callback) {
-  const ad = document.createElement("div");
-  ad.innerHTML = `
-    <div style="
-      position:fixed;
-      top:0; left:0;
-      width:100%; height:100%;
-      background:black;
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      z-index:9999;
-    ">
-      <p style="color:white;">Loading Ad...</p>
-    </div>
-  `;
-  document.body.appendChild(ad);
-
-  setTimeout(() => {
-    document.body.removeChild(ad);
-
-    // THIS is the important part
-    if (callback) callback();
-
-  }, 2000);
-}
-init();

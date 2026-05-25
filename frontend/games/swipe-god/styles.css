@@ -1,0 +1,175 @@
+/* =========================
+   GLOBAL RESET / BASE LAYOUT
+========================= */
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: black;
+  font-family: Arial, sans-serif;
+}
+
+canvas {
+  display: block;
+}
+
+/* =========================
+   GAME CANVAS LAYER
+   (must NOT block clicks)
+========================= */
+
+#gameCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  pointer-events: none; /* prevents click blocking */
+}
+
+/* =========================
+   GAME MENU OVERLAY SYSTEM
+========================= */
+
+#menu {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at center, #000 30%, #020814);
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  overflow: hidden;
+
+  z-index: 999999; /* 🔥 MUST be highest layer */
+}
+
+/* =========================
+   BACKGROUND FX ORB
+========================= */
+
+.bg-orb {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(0, 255, 204, 0.15), transparent 60%);
+  filter: blur(50px);
+  animation: floatMove 6s ease-in-out infinite;
+}
+
+@keyframes floatMove {
+  0%, 100% {
+    transform: translate(-30px, -20px) scale(1);
+  }
+  50% {
+    transform: translate(30px, 40px) scale(1.1);
+  }
+}
+
+/* =========================
+   TITLE / BRAND
+========================= */
+
+.title-wrap {
+  text-align: center;
+  z-index: 2;
+  animation: fadeIn 1s ease;
+}
+
+.title-wrap h1 {
+  font-size: 62px;
+  color: #00ffcc;
+  text-shadow: 0 0 25px rgba(0, 255, 204, 0.6);
+  margin-bottom: 10px;
+  letter-spacing: 3px;
+}
+
+.title-wrap p {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 16px;
+}
+
+/* =========================
+   TAP HINT
+========================= */
+
+.tap-hint {
+  margin-top: 40px;
+  font-size: 12px;
+  letter-spacing: 3px;
+  color: rgba(255, 255, 255, 0.35);
+  animation: pulse 1.8s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+/* =========================
+   PLAY BUTTON
+========================= */
+
+.play {
+  margin-top: 25px;
+  padding: 16px 60px;
+  border-radius: 14px;
+  border: none;
+
+  background: linear-gradient(135deg, #00ffcc, #00bfa6);
+  color: black;
+
+  font-size: 18px;
+  font-weight: 900;
+
+  cursor: pointer;
+
+  box-shadow: 0 0 25px rgba(0, 255, 204, 0.25);
+
+  transition: transform 0.2s ease;
+  z-index: 3;
+  position: relative;
+}
+
+.play:hover {
+  transform: scale(1.05);
+}
+
+.play:active {
+  transform: scale(0.96);
+}
+
+/* =========================
+   FADE IN ANIMATION
+========================= */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================
+   ADS BAR
+========================= */
+
+#ad-container {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 10000;
+}

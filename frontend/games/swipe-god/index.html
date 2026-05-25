@@ -4,116 +4,114 @@
   <meta charset="UTF-8">
   <title>Swipe God</title>
 
-  <!-- ADSENSE SCRIPT (LOAD ONCE) -->
+  <!-- =========================
+       ADSENSE (MONETIZATION)
+       NOTE: Must load before ads render
+  ========================== -->
   <script async
     src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7708023438338001"
     crossorigin="anonymous"></script>
 
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background: black;
-      font-family: Arial, sans-serif;
-    }
-
-    canvas {
-      display: block;
-    }
-
-    /* HOME SCREEN */
-    #menu {
-      position: fixed;
-      inset: 0;
-      background: radial-gradient(circle, #001f26, #000);
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      z-index: 9999;
-    }
-
-    #menu h1 {
-      color: #00ffcc;
-      font-size: 48px;
-      margin-bottom: 20px;
-      text-shadow: 0 0 20px #00ffcc;
-    }
-
-    #menu button {
-      padding: 15px 40px;
-      font-size: 20px;
-      border: none;
-      border-radius: 10px;
-      background: #00ffcc;
-      color: black;
-      cursor: pointer;
-    }
-
-    /* GAME CANVAS LAYER */
-    #gameCanvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 1;
-    }
-
-    /* BOTTOM AD */
-    #ad-container {
-      position: fixed;
-      bottom: 0;
-      width: 100%;
-      text-align: center;
-      background: rgba(0,0,0,0.6);
-      z-index: 10000;
-    }
-  </style>
+  <!-- External stylesheet (ALL UI styles live here) -->
+  <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
 
-<!-- HOME SCREEN -->
+<!-- =========================
+     MAIN MENU OVERLAY
+     NOTE: This blocks gameplay until startGame() runs
+     Controlled by JS state: gameStarted
+========================== -->
 <div id="menu">
-  <h1>SWIPE GOD</h1>
-  <button onclick="startGame()">PLAY</button>
+
+  <!-- Background FX layer (purely visual) -->
+  <div class="bg-orb"></div>
+
+  <!-- Title block (branding layer) -->
+  <div class="title-wrap">
+    <h1>SWIPE GOD</h1>
+    <p>Master the trace. Build the streak.</p>
+  </div>
+
+  <!-- UX hint (mobile onboarding signal) -->
+  <div class="tap-hint">TAP TO BEGIN</div>
+
+  <!-- Entry point into game loop -->
+  <button class="play" onclick="startGame()">PLAY</button>
 </div>
 
-<!-- GAME CANVAS -->
+<!-- =========================
+     GAME RENDER SURFACE
+     NOTE: game.js controls all rendering logic here
+========================== -->
 <canvas id="gameCanvas"></canvas>
 
-<!-- AD BANNER (BOTTOM FIXED) -->
+<!-- =========================
+     ADS CONTAINER
+     NOTE: Keep fixed position if UI overlays later
+========================== -->
 <div id="ad-container">
-
   <ins class="adsbygoogle"
        style="display:block"
        data-ad-client="ca-pub-7708023438338001"
        data-ad-slot="9146349585"
        data-ad-format="auto"
        data-full-width-responsive="true"></ins>
-
 </div>
 
-<!-- PUSH ADS AFTER ELEMENT EXISTS -->
+<!-- Initialize ads AFTER DOM exists -->
 <script>
   (adsbygoogle = window.adsbygoogle || []).push({});
 </script>
 
-<!-- GAME SCRIPT -->
+<!-- =========================
+     GAME ENGINE ENTRY FILE
+     NOTE: Must expose init() function globally
+========================== -->
 <script src="game.js"></script>
 
-<!-- MENU LOGIC -->
 <script>
+  // =========================
+  // GLOBAL GAME STATE FLAG
+  // Controls input blocking before start
+  // =========================
   let gameStarted = false;
 
+  // =========================
+  // START GAME FUNCTION
+  // UI transition → disables menu → boots engine
+  // =========================
   function startGame() {
-    document.getElementById("menu").style.display = "none";
-    gameStarted = true;
+    const menu = document.getElementById("menu");
+
+    // Smooth transition out (UX polish layer)
+    menu.style.transition = "opacity .25s ease, transform .25s ease";
+    menu.style.opacity = "0";
+    menu.style.transform = "scale(1.05)";
+
+    // Delay ensures animation completes before DOM removal
+    setTimeout(() => {
+      menu.style.display = "none";
+      gameStarted = true;
+
+      // Defensive check (prevents runtime crash if game.js missing init)
+      if (typeof init === "function") {
+        init(); // boot game engine
+      } else {
+        console.error("[SwipeGod] init() not found in game.js");
+      }
+    }, 250);
   }
 
+  // =========================
+  // INPUT GUARD
+  // Prevents accidental canvas interaction before game starts
+  // =========================
   window.addEventListener("DOMContentLoaded", () => {
     const canvas = document.getElementById("gameCanvas");
 
-    canvas.addEventListener("pointerdown", e => {
+    canvas.addEventListener("pointerdown", (e) => {
       if (!gameStarted) e.preventDefault();
     });
   });
