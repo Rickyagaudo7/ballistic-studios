@@ -358,39 +358,43 @@ function cpuAnimateDraw() {
 
   glowAnimating = false;
 
-  function step() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const shake = getShakeOffset();
-ctx.save();
-ctx.translate(shake.x, shake.y);
+ function step() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    drawBackground();
-    drawStreakLines();
+  const shake = getShakeOffset();
 
-    const pulseGlow = 15 + 10 * Math.sin(pulsePhase);
-    pulsePhase += 0.1;
+  ctx.save();
+  ctx.translate(shake.x, shake.y);
 
-    const currentColor = getStreakColor(streak);
-    drawPartialPath(sequence, animationProgress, currentColor, 12, pulseGlow);
+  drawBackground();
+  drawStreakLines();
 
-    drawTimerBar();
-    displayLevel();
+  const pulseGlow = 15 + 10 * Math.sin(pulsePhase);
+  pulsePhase += 0.1;
 
-    animationProgress += animationSpeed;
-    if (animationProgress <= 1) {
-      requestAnimationFrame(step);
-    } else {
-      cpuPlaying = false;
-      setTimeout(() => {
-  cpuPlaying = false; // now player can interact
-}, 200);
-      animationProgress = 1;
+  const currentColor = getStreakColor(streak);
+  drawPartialPath(sequence, animationProgress, currentColor, 12, pulseGlow);
+
+  drawTimerBar();
+  displayLevel();
+
+  ctx.restore();
+
+  animationProgress += animationSpeed;
+
+  if (animationProgress <= 1) {
+    requestAnimationFrame(step);
+  } else {
+    cpuPlaying = false;
+    animationProgress = 1;
+
+    setTimeout(() => {
       glowAnimating = true;
       glowProgress = 0;
       animateGlowAlongLine();
-      ctx.restore();
-    }
+    }, 200);
   }
+}
   step();
 }
 
