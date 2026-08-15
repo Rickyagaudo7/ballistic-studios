@@ -1,672 +1,2676 @@
 const canvas = document.getElementById("gameCanvas");
+
+if (!canvas) {
+    throw new Error("gameCanvas element was not found.");
+}
+
 const ctx = canvas.getContext("2d");
 
-function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+if (!ctx) {
+    throw new Error("Unable to create 2D canvas context.");
 }
-window.addEventListener("resize", resize);
-resize();
 
-const PIXELS_PER_INCH = 96;
-const SEGMENT_LENGTH = 3 * PIXELS_PER_INCH;
-const tolerance = 155;
-const TIMER_DURATION = 3000; // ms allowed between swipes before timeout
-const HELP_TRACE_FADE_DURATION = 2500; // ms for helping trace fade out
-const STREAK_LINE_FADE_DURATION = 1500; // ms for streak lines to fade out smoothly
+// ============================================================
+// CONFIGURATION
+// ============================================================
+
+const CONFIG = {
+    // --------------------------------------------------------
+    // GAME
+    // --------------------------------------------------------
+
+    MAX_LEVEL: 10,
+
+    // Approximate pixels used for each path segment.
+    SEGMENT_LENGTH_PX: 288,
+
+    // How far the player's pointer can be from the path.
+    TRACE_TOLERANCE: 110,
+
+    // Total time allowed to complete a trace.
+    TIMER_DURATION: 3000,
+
+    // --------------------------------------------------------
+    // VISUAL EFFECTS
+    // --------------------------------------------------------
+
+    HELP_TRACE_FADE_DURATION: 2500,
+    STREAK_LINE_FADE_DURATION: 1500,
+
+    CPU_ANIMATION_DURATION: 4000,
+
+    // Progress per second.
+    GLOW_SPEED: 0.35,
+
+    SHIMMER_DURATION: 1200,
+    SUCCESS_FADE_DURATION: 500,
+    NEXT_LEVEL_DELAY: 1500,
+
+    // --------------------------------------------------------
+    // PLAYER TRACE
+    // --------------------------------------------------------
+
+    MIN_TRACE_POINT_DISTANCE: 4,
+
+    // --------------------------------------------------------
+    // PATH GENERATION
+    // --------------------------------------------------------
+
+    MAX_TURN: Math.PI / 4,
+    PATH_RADIUS_RATIO: 1 / 3,
+
+    // --------------------------------------------------------
+    // VALIDATION
+    // --------------------------------------------------------
+
+    MIN_PATH_COVERAGE: 0.70,
+    MIN_PATH_PROGRESS: 0.90,
+    MAX_BACKWARD_MOVEMENT: 0.20,
+    MAX_BACKWARD_EVENTS_RATIO: 0.08,
+
+    // --------------------------------------------------------
+    // GAME FEEL
+    // --------------------------------------------------------
+
+    FAILURE_RECOVERY_DELAY: 700,
+    INVALID_START_SHAKE_STRENGTH: 5,
+    INVALID_START_SHAKE_DURATION: 120,
+
+    FAILURE_SHAKE_STRENGTH: 12,
+    FAILURE_SHAKE_DURATION: 350,
+
+    SUCCESS_SHAKE_STRENGTH: 4,
+    SUCCESS_SHAKE_DURATION: 180,
+
+    // --------------------------------------------------------
+    // UI
+    // --------------------------------------------------------
+
+    UI_MARGIN: 20
+};
+
+// ============================================================
+// GAME STATES
+// ============================================================
+
+const GAME_STATE = {
+    DEMO: "demo",
+    READY: "ready",
+    TRACING: "tracing",
+    SUCCESS: "success",
+    FAILED: "failed",
+    COMPLETE: "complete"
+};
+
+let gameState = GAME_STATE.DEMO;
+
+// ============================================================
+// GAME DATA
+// ============================================================
 
 let currentLevel = 1;
-let maxLines = 10;
+let streak = 0;
+
 let fullSequence = [];
 let sequence = [];
-let cpuPlaying = true;
+
 let userTrace = [];
-let tracing = false;
 
+let completedStreakLines = [];
 
-let animationProgress = 0;
-let animationSpeed = 0.004; // slower fixed speed for animation
-let shakeTime = 0;
-let shakeStrength = 0;
+let pointerId = null;
+
+// ============================================================
+// TIMERS / ANIMATION STATE
+// ============================================================
+
 let timerStart = 0;
 let timerRunning = false;
-let timerId = null;
 
-// Helping trace fade timer
-let helpTraceStart = 0;
-let helpTraceAlpha = 1;
-
-// Streak system - stores fading info per streak line
-let streak = 0;
-let completedStreakLines = []; // { points, color, fadeStart, fadeProgress }
+let cpuAnimationProgress = 0;
+let cpuAnimationStart = 0;
 
 let glowAnimating = false;
 let glowProgress = 0;
-const glowSpeed = 0.008;
 
-function triggerShake(strength = 12, duration = 300) {
-  shakeStrength = strength;
-  shakeTime = duration;
+let helpTraceStart = 0;
+let helpTraceAlpha = 1;
+
+let successAnimationStart = 0;
+let successAnimationProgress = 0;
+
+let nextLevelTime = 0;
+
+let failureFlash = 0;
+
+let shakeTime = 0;
+let shakeDuration = 0;
+let shakeStrength = 0;
+
+let lastFrameTime = performance.now();
+
+// Used to prevent delayed timers from affecting a newer game state.
+let gameSessionId = 0;
+
+// ============================================================
+// CANVAS / RESIZE
+// ============================================================
+
+function resize() {
+    const oldWidth = canvas.width;
+    const oldHeight = canvas.height;
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    /*
+     * If the game has already started, regenerate the path
+     * so that it remains centered on the new canvas.
+     *
+     * We intentionally do not interrupt the COMPLETE screen.
+     */
+    if (
+        oldWidth > 0 &&
+        oldHeight > 0 &&
+        fullSequence.length > 0 &&
+        gameState !== GAME_STATE.COMPLETE
+    ) {
+        regenerateCurrentSequence();
+    }
 }
 
-function getShakeOffset() {
-  if (shakeTime > 0) {
-    shakeTime -= 16;
+window.addEventListener("resize", resize);
 
-    return {
-      x: (Math.random() - 0.5) * shakeStrength,
-      y: (Math.random() - 0.5) * shakeStrength
-    };
-  }
+// ============================================================
+// GAME LOOP
+// ============================================================
 
-  return { x: 0, y: 0 };
+function gameLoop(now) {
+    const deltaTime = Math.min(
+        (now - lastFrameTime) / 1000,
+        0.1
+    );
+
+    lastFrameTime = now;
+
+    update(deltaTime, now);
+    render(now);
+
+    requestAnimationFrame(gameLoop);
 }
 
+// ============================================================
+// UPDATE
+// ============================================================
 
-function getStreakColor(s) {
-  if (s >= 10) return "rgba(255,0,255,0.9)";       // Magenta
-  if (s >= 6) return "rgba(255,215,0,0.9)";        // Gold
-  if (s >= 3) return "rgba(0,255,0,0.9)";          // Green
-  return "rgba(0,255,204,0.9)";                     // Cyan default
-}
+function update(deltaTime, now) {
+    updateShake(deltaTime);
+    updateFailureFlash(deltaTime);
+    updateStreakFades(now);
 
-function dimColor(rgba, factor = 0.4, alphaFactor = 1) {
-  const parts = rgba.match(/rgba?\((\d+),(\d+),(\d+),?([\d.]*)\)/);
-  if (!parts) return rgba;
-  let [r, g, b, a] = parts.slice(1).map(Number);
-  if (isNaN(a)) a = 1;
-  r = Math.floor(r * factor);
-  g = Math.floor(g * factor);
-  b = Math.floor(b * factor);
-  a = a * factor * 0.7 * alphaFactor;
-  return `rgba(${r},${g},${b},${a})`;
-}
-
-// Generates a smooth circular sequence of points for the trace
-function generateSequence(level) {
-  const points = [];
-  const centerX = canvas.width / 2;
-  const centerY = canvas.height / 2;
-  const maxRadius = Math.min(canvas.width, canvas.height) / 3;
-
-  points.push({ x: centerX, y: centerY }); // start at center
-
-  // Initial random angle
-  let angle = Math.random() * 2 * Math.PI;
-
-  for (let i = 1; i <= level; i++) {
-    const last = points[points.length - 1];
-
-    // Limit angle change to ±45 degrees per step (smoother turns)
-    const maxTurn = Math.PI / 4;
-    const angleChange = (Math.random() * 2 - 1) * maxTurn;
-    angle += angleChange;
-
-    // Calculate candidate next point
-    let newX = last.x + Math.cos(angle) * SEGMENT_LENGTH;
-    let newY = last.y + Math.sin(angle) * SEGMENT_LENGTH;
-
-    // Check if outside circular boundary
-    let distFromCenter = Math.hypot(newX - centerX, newY - centerY);
-    if (distFromCenter > maxRadius) {
-      // Steer angle gently back toward center
-      const angleToCenter = Math.atan2(centerY - last.y, centerX - last.x);
-      const steerStrength = 0.7;
-      angle = angle * (1 - steerStrength) + angleToCenter * steerStrength;
-
-      // Recalculate next point after steering
-      newX = last.x + Math.cos(angle) * SEGMENT_LENGTH;
-      newY = last.y + Math.sin(angle) * SEGMENT_LENGTH;
-
-      // Clamp if still out of bounds (rare)
-      distFromCenter = Math.hypot(newX - centerX, newY - centerY);
-      if (distFromCenter > maxRadius) {
-        const scaleBack = maxRadius / distFromCenter;
-        newX = centerX + (newX - centerX) * scaleBack;
-        newY = centerY + (newY - centerY) * scaleBack;
-      }
+    if (gameState === GAME_STATE.DEMO) {
+        updateCpuAnimation(now);
     }
 
-    points.push({ x: newX, y: newY });
-  }
+    if (gameState === GAME_STATE.READY) {
+        updateGlow(deltaTime);
+    }
 
-  return points;
+    if (gameState === GAME_STATE.TRACING) {
+        updateTimer(now);
+        updateHelpTrace(now);
+    }
+
+    if (gameState === GAME_STATE.SUCCESS) {
+        updateSuccessAnimation(now);
+    }
+
+    // --------------------------------------------------------
+    // MOVE TO NEXT LEVEL
+    // --------------------------------------------------------
+
+    if (
+        gameState === GAME_STATE.SUCCESS &&
+        nextLevelTime > 0 &&
+        now >= nextLevelTime
+    ) {
+        nextLevelTime = 0;
+
+        if (currentLevel >= CONFIG.MAX_LEVEL) {
+            gameState = GAME_STATE.COMPLETE;
+            timerRunning = false;
+        } else {
+            currentLevel++;
+
+            sequence = fullSequence.slice(
+                0,
+                currentLevel + 1
+            );
+
+            startCpuDemo();
+        }
+    }
 }
+
+// ============================================================
+// RENDER
+// ============================================================
+
+function render(now) {
+    ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    const shake = getShakeOffset();
+
+    ctx.save();
+
+    ctx.translate(
+        shake.x,
+        shake.y
+    );
+
+    drawBackground();
+    drawStreakLines();
+
+    // --------------------------------------------------------
+    // GAME STATE VISUALS
+    // --------------------------------------------------------
+
+    if (gameState === GAME_STATE.DEMO) {
+        drawCpuSequence();
+    }
+
+    if (gameState === GAME_STATE.READY) {
+        drawReadySequence();
+    }
+
+    if (gameState === GAME_STATE.TRACING) {
+        drawFadingHelpTrace();
+        drawUserTrace();
+        drawTimerRing();
+    }
+
+    if (gameState === GAME_STATE.SUCCESS) {
+        drawSuccessState();
+    }
+
+    if (gameState === GAME_STATE.FAILED) {
+        drawFailureState();
+    }
+
+    if (gameState === GAME_STATE.COMPLETE) {
+        drawCompleteGame();
+    }
+
+    drawUI();
+    drawFailureFlash();
+
+    ctx.restore();
+}
+
+// ============================================================
+// BACKGROUND
+// ============================================================
 
 function drawBackground() {
-  const gradient = ctx.createRadialGradient(
-    canvas.width / 2,
-    canvas.height / 2,
-    Math.min(canvas.width, canvas.height) / 10,
-    canvas.width / 2,
-    canvas.height / 2,
-    Math.min(canvas.width, canvas.height) / 2
-  );
-  gradient.addColorStop(0, "#001f26");
-  gradient.addColorStop(1, "#000811");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+
+    const size = Math.min(
+        canvas.width,
+        canvas.height
+    );
+
+    const innerRadius = size / 10;
+    const outerRadius = size / 2;
+
+    const gradient = ctx.createRadialGradient(
+        centerX,
+        centerY,
+        innerRadius,
+        centerX,
+        centerY,
+        outerRadius
+    );
+
+    gradient.addColorStop(
+        0,
+        "#001f26"
+    );
+
+    gradient.addColorStop(
+        1,
+        "#000811"
+    );
+
+    ctx.fillStyle = gradient;
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
 }
 
-function drawPartialPath(points, t, color = "rgba(0, 255, 204, 1)", lineWidth = 8, shadowBlur = 15) {
-  if (points.length < 2) return;
+// ============================================================
+// PATH GENERATION
+// ============================================================
 
-  ctx.strokeStyle = color;
-  ctx.lineWidth = lineWidth;
-  ctx.lineCap = "round";
-  ctx.shadowColor = color;
-  ctx.shadowBlur = shadowBlur;
+function generateSequence(level) {
+    const points = [];
 
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
 
-  const totalSegments = points.length - 1;
-  let drawnLength = t * totalSegments;
+    const maxRadius =
+        Math.min(
+            canvas.width,
+            canvas.height
+        ) * CONFIG.PATH_RADIUS_RATIO;
 
-  for (let i = 1; i < points.length; i++) {
-    if (drawnLength >= 1) {
-      ctx.lineTo(points[i].x, points[i].y);
-      drawnLength -= 1;
-    } else if (drawnLength > 0) {
-      const start = points[i - 1];
-      const end = points[i];
-      const partialX = start.x + (end.x - start.x) * drawnLength;
-      const partialY = start.y + (end.y - start.y) * drawnLength;
-      ctx.lineTo(partialX, partialY);
-      break;
-    } else {
-      break;
+    // Start exactly in the center.
+    points.push({
+        x: centerX,
+        y: centerY
+    });
+
+    let angle =
+        Math.random() *
+        Math.PI *
+        2;
+
+    for (let i = 1; i <= level; i++) {
+        const last =
+            points[points.length - 1];
+
+        const angleChange =
+            (Math.random() * 2 - 1) *
+            CONFIG.MAX_TURN;
+
+        angle += angleChange;
+
+        let newX =
+            last.x +
+            Math.cos(angle) *
+            CONFIG.SEGMENT_LENGTH_PX;
+
+        let newY =
+            last.y +
+            Math.sin(angle) *
+            CONFIG.SEGMENT_LENGTH_PX;
+
+        const distanceFromCenter =
+            Math.hypot(
+                newX - centerX,
+                newY - centerY
+            );
+
+        // ----------------------------------------------------
+        // Keep the path inside the playable radius.
+        // ----------------------------------------------------
+
+        if (
+            distanceFromCenter >
+            maxRadius
+        ) {
+            const angleToCenter =
+                Math.atan2(
+                    centerY - last.y,
+                    centerX - last.x
+                );
+
+            angle = lerpAngle(
+                angle,
+                angleToCenter,
+                0.7
+            );
+
+            newX =
+                last.x +
+                Math.cos(angle) *
+                CONFIG.SEGMENT_LENGTH_PX;
+
+            newY =
+                last.y +
+                Math.sin(angle) *
+                CONFIG.SEGMENT_LENGTH_PX;
+
+            const newDistance =
+                Math.hypot(
+                    newX - centerX,
+                    newY - centerY
+                );
+
+            // Final safety clamp.
+            if (
+                newDistance >
+                maxRadius
+            ) {
+                const scale =
+                    maxRadius /
+                    newDistance;
+
+                newX =
+                    centerX +
+                    (newX - centerX) *
+                    scale;
+
+                newY =
+                    centerY +
+                    (newY - centerY) *
+                    scale;
+            }
+        }
+
+        points.push({
+            x: newX,
+            y: newY
+        });
     }
-  }
 
-  ctx.stroke();
-  ctx.shadowBlur = 0;
+    return points;
+}
+
+// ============================================================
+// REGENERATE PATH
+// ============================================================
+
+function regenerateCurrentSequence() {
+    if (fullSequence.length === 0) {
+        return;
+    }
+
+    fullSequence =
+        generateSequence(
+            CONFIG.MAX_LEVEL
+        );
+
+    sequence =
+        fullSequence.slice(
+            0,
+            currentLevel + 1
+        );
+
+    userTrace = [];
+
+    timerRunning = false;
+
+    glowAnimating = false;
+    glowProgress = 0;
+
+    helpTraceStart = 0;
+    helpTraceAlpha = 1;
+
+    /*
+     * If the player was actively playing when the window
+     * changed size, restart the demonstration rather than
+     * leaving them with a broken path.
+     */
+    if (
+        gameState !== GAME_STATE.COMPLETE
+    ) {
+        startCpuDemo();
+    }
+}
+
+// ============================================================
+// ANGLE INTERPOLATION
+// ============================================================
+
+function lerpAngle(a, b, t) {
+    const difference =
+        Math.atan2(
+            Math.sin(b - a),
+            Math.cos(b - a)
+        );
+
+    return a + difference * t;
+}
+
+// ============================================================
+// COLORS
+// ============================================================
+
+function getStreakColor(streakValue) {
+    if (streakValue >= 10) {
+        return "rgba(255, 0, 255, 0.9)";
+    }
+
+    if (streakValue >= 6) {
+        return "rgba(255, 215, 0, 0.9)";
+    }
+
+    if (streakValue >= 3) {
+        return "rgba(0, 255, 0, 0.9)";
+    }
+
+    return "rgba(0, 255, 204, 0.9)";
+}
+
+// ============================================================
+// COLOR DIMMING
+// ============================================================
+
+function dimColor(
+    rgba,
+    factor = 0.4,
+    alphaFactor = 1
+) {
+    const match =
+        rgba.match(
+            /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/
+        );
+
+    if (!match) {
+        return rgba;
+    }
+
+    let r = Number(match[1]);
+    let g = Number(match[2]);
+    let b = Number(match[3]);
+
+    let a =
+        match[4] !== undefined
+            ? Number(match[4])
+            : 1;
+
+    r = Math.floor(r * factor);
+    g = Math.floor(g * factor);
+    b = Math.floor(b * factor);
+
+    a *= factor * 0.7 * alphaFactor;
+
+    return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+
+// ============================================================
+// PATH DRAWING
+// ============================================================
+
+function drawPartialPath(
+    points,
+    progress,
+    color = "rgba(0, 255, 204, 1)",
+    lineWidth = 8,
+    shadowBlur = 15
+) {
+    if (
+        !points ||
+        points.length < 2
+    ) {
+        return;
+    }
+
+    progress =
+        Math.max(
+            0,
+            Math.min(
+                1,
+                progress
+            )
+        );
+
+    const totalSegments =
+        points.length - 1;
+
+    const scaledProgress =
+        progress *
+        totalSegments;
+
+    ctx.save();
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.shadowColor = color;
+    ctx.shadowBlur = shadowBlur;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        points[0].x,
+        points[0].y
+    );
+
+    let remaining =
+        scaledProgress;
+
+    for (
+        let i = 1;
+        i < points.length;
+        i++
+    ) {
+        if (remaining >= 1) {
+            ctx.lineTo(
+                points[i].x,
+                points[i].y
+            );
+
+            remaining -= 1;
+        } else if (remaining > 0) {
+            const start =
+                points[i - 1];
+
+            const end =
+                points[i];
+
+            const x =
+                start.x +
+                (end.x - start.x) *
+                remaining;
+
+            const y =
+                start.y +
+                (end.y - start.y) *
+                remaining;
+
+            ctx.lineTo(
+                x,
+                y
+            );
+
+            break;
+        } else {
+            break;
+        }
+    }
+
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+// ============================================================
+// CPU DEMONSTRATION
+// ============================================================
+
+function startCpuDemo() {
+    gameState =
+        GAME_STATE.DEMO;
+
+    cpuAnimationStart =
+        performance.now();
+
+    cpuAnimationProgress = 0;
+
+    glowAnimating = false;
+    glowProgress = 0;
+
+    userTrace = [];
+
+    timerRunning = false;
+
+    helpTraceStart = 0;
+    helpTraceAlpha = 1;
+
+    nextLevelTime = 0;
+
+    pointerId = null;
+
+    gameSessionId++;
+}
+
+function updateCpuAnimation(now) {
+    const elapsed =
+        now -
+        cpuAnimationStart;
+
+    cpuAnimationProgress =
+        Math.min(
+            elapsed /
+            CONFIG.CPU_ANIMATION_DURATION,
+            1
+        );
+
+    if (
+        cpuAnimationProgress >= 1
+    ) {
+        gameState =
+            GAME_STATE.READY;
+
+        glowAnimating = true;
+        glowProgress = 0;
+    }
+}
+
+function drawCpuSequence() {
+    const pulse =
+        15 +
+        10 *
+        Math.sin(
+            performance.now() *
+            0.005
+        );
+
+    const color =
+        getStreakColor(
+            streak
+        );
+
+    drawPartialPath(
+        sequence,
+        cpuAnimationProgress,
+        color,
+        12,
+        pulse
+    );
+}
+
+// ============================================================
+// READY STATE
+// ============================================================
+
+function drawReadySequence() {
+    drawPartialPath(
+        sequence,
+        1,
+        "rgba(0, 255, 204, 0.35)",
+        8,
+        12
+    );
+
+    if (glowAnimating) {
+        drawGlowAlongLine();
+    }
+
+    drawPartialPath(
+        sequence,
+        1,
+        "rgba(0, 255, 204, 1)",
+        12,
+        20
+    );
+}
+
+// ============================================================
+// GLOW ANIMATION
+// ============================================================
+
+function updateGlow(deltaTime) {
+    if (!glowAnimating) {
+        return;
+    }
+
+    glowProgress +=
+        CONFIG.GLOW_SPEED *
+        deltaTime;
+
+    if (glowProgress >= 1) {
+        glowProgress = 0;
+    }
+}
+
+function drawGlowAlongLine() {
+    if (
+        !sequence ||
+        sequence.length < 2
+    ) {
+        return;
+    }
+
+    const totalSegments =
+        sequence.length - 1;
+
+    const scaledT =
+        glowProgress *
+        totalSegments;
+
+    let segmentIndex =
+        Math.floor(
+            scaledT
+        );
+
+    let segmentProgress =
+        scaledT -
+        segmentIndex;
+
+    if (
+        segmentIndex >=
+        totalSegments
+    ) {
+        segmentIndex =
+            totalSegments - 1;
+
+        segmentProgress = 1;
+    }
+
+    const start =
+        sequence[segmentIndex];
+
+    const end =
+        sequence[
+            segmentIndex + 1
+        ];
+
+    const x =
+        start.x +
+        (end.x - start.x) *
+        segmentProgress;
+
+    const y =
+        start.y +
+        (end.y - start.y) *
+        segmentProgress;
+
+    const radius = 20;
+
+    const gradient =
+        ctx.createRadialGradient(
+            x,
+            y,
+            radius / 4,
+            x,
+            y,
+            radius
+        );
+
+    gradient.addColorStop(
+        0,
+        "rgba(0, 255, 255, 0.9)"
+    );
+
+    gradient.addColorStop(
+        1,
+        "rgba(0, 255, 255, 0)"
+    );
+
+    ctx.save();
+
+    ctx.fillStyle =
+        gradient;
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x,
+        y,
+        radius,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.restore();
+}
+
+// ============================================================
+// USER TRACE
+// ============================================================
+
+function drawUserTrace() {
+    if (
+        !userTrace ||
+        userTrace.length < 2
+    ) {
+        return;
+    }
+
+    const color =
+        getStreakColor(
+            streak
+        );
+
+    ctx.save();
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 7;
+
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 30;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        userTrace[0].x,
+        userTrace[0].y
+    );
+
+    for (
+        let i = 1;
+        i < userTrace.length;
+        i++
+    ) {
+        ctx.lineTo(
+            userTrace[i].x,
+            userTrace[i].y
+        );
+    }
+
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+// ============================================================
+// HELP TRACE
+// ============================================================
+
+function startHelpTrace() {
+    helpTraceStart =
+        performance.now();
+
+    helpTraceAlpha = 1;
+}
+
+function updateHelpTrace(now) {
+    if (
+        helpTraceStart === 0
+    ) {
+        return;
+    }
+
+    const elapsed =
+        now -
+        helpTraceStart;
+
+    helpTraceAlpha =
+        1 -
+        elapsed /
+        CONFIG.HELP_TRACE_FADE_DURATION;
+
+    helpTraceAlpha =
+        Math.max(
+            0,
+            Math.min(
+                1,
+                helpTraceAlpha
+            )
+        );
 }
 
 function drawFadingHelpTrace() {
-  if (sequence.length < 2 || userTrace.length < 1) return;
-
-  const elapsed = Date.now() - helpTraceStart;
-  helpTraceAlpha = 1 - elapsed / HELP_TRACE_FADE_DURATION;
-  if (helpTraceAlpha < 0) helpTraceAlpha = 0;
-  if (helpTraceAlpha === 0) return;
-
-  const lastUser = userTrace[userTrace.length - 1];
-  const totalSegments = sequence.length - 1;
-
-  let minDist = Infinity;
-  let tUser = 0;
-  for (let i = 0; i < totalSegments; i++) {
-    const start = sequence[i];
-    const end = sequence[i + 1];
-    const A = lastUser.x - start.x;
-    const B = lastUser.y - start.y;
-    const C = end.x - start.x;
-    const D = end.y - start.y;
-    const dot = A * C + B * D;
-    const len_sq = C * C + D * D;
-    let param = len_sq !== 0 ? dot / len_sq : -1;
-    param = Math.min(Math.max(param, 0), 1);
-    const xx = start.x + param * C;
-    const yy = start.y + param * D;
-    const dist = Math.hypot(lastUser.x - xx, lastUser.y - yy);
-    if (dist < minDist) {
-      minDist = dist;
-      tUser = (i + param) / totalSegments;
+    if (
+        sequence.length < 2 ||
+        userTrace.length < 1 ||
+        helpTraceAlpha <= 0
+    ) {
+        return;
     }
-  }
 
-  ctx.lineCap = "round";
-  ctx.lineWidth = 8;
+    const lastUser =
+        userTrace[
+            userTrace.length - 1
+        ];
 
-  for (let i = 0; i < totalSegments; i++) {
-    const start = sequence[i];
-    const end = sequence[i + 1];
-    const segCenterT = (i + 0.5) / totalSegments;
+    const totalSegments =
+        sequence.length - 1;
 
-    let alpha;
-    if (segCenterT > tUser) {
-      alpha = 0.1 * helpTraceAlpha;
-    } else {
-      alpha = (0.05 + 0.75 * (segCenterT / tUser)) * helpTraceAlpha;
+    let minimumDistance =
+        Infinity;
+
+    let userProgress = 0;
+
+    // --------------------------------------------------------
+    // Find where the player currently is on the path.
+    // --------------------------------------------------------
+
+    for (
+        let i = 0;
+        i < totalSegments;
+        i++
+    ) {
+        const start =
+            sequence[i];
+
+        const end =
+            sequence[i + 1];
+
+        const A =
+            lastUser.x -
+            start.x;
+
+        const B =
+            lastUser.y -
+            start.y;
+
+        const C =
+            end.x -
+            start.x;
+
+        const D =
+            end.y -
+            start.y;
+
+        const dot =
+            A * C +
+            B * D;
+
+        const lengthSquared =
+            C * C +
+            D * D;
+
+        let parameter =
+            lengthSquared !== 0
+                ? dot /
+                  lengthSquared
+                : 0;
+
+        parameter =
+            Math.max(
+                0,
+                Math.min(
+                    1,
+                    parameter
+                )
+            );
+
+        const closestX =
+            start.x +
+            parameter * C;
+
+        const closestY =
+            start.y +
+            parameter * D;
+
+        const distance =
+            Math.hypot(
+                lastUser.x -
+                    closestX,
+                lastUser.y -
+                    closestY
+            );
+
+        if (
+            distance <
+            minimumDistance
+        ) {
+            minimumDistance =
+                distance;
+
+            userProgress =
+                (i + parameter) /
+                totalSegments;
+        }
     }
-    alpha = Math.min(Math.max(alpha, 0.01), 0.8 * helpTraceAlpha);
-
-    const color = `rgba(0,255,204,${alpha})`;
-
-    ctx.strokeStyle = color;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 12 * helpTraceAlpha;
-
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    ctx.lineTo(end.x, end.y);
-    ctx.stroke();
-  }
-
-  ctx.shadowBlur = 0;
-}
-
-function drawStreakLines() {
-  const now = Date.now();
-  completedStreakLines = completedStreakLines.filter(line => {
-    if (!line.fadeStart) return true;
-    const elapsed = now - line.fadeStart;
-    line.fadeProgress = Math.min(elapsed / STREAK_LINE_FADE_DURATION, 1);
-    return line.fadeProgress < 1;
-  });
-
-  completedStreakLines.forEach(line => {
-    const alpha = line.fadeStart ? 1 - line.fadeProgress : 1;
-    const shrinkFactor = line.fadeStart ? 1 - line.fadeProgress * 0.7 : 1;
-    const color = dimColor(line.color, 0.4, alpha);
 
     ctx.save();
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.scale(shrinkFactor, shrinkFactor);
-    ctx.translate(-canvas.width / 2, -canvas.height / 2);
 
-    drawPartialPath(line.points, 1, color, 4, 8);
+    ctx.lineCap = "round";
+    ctx.lineWidth = 8;
+
+    for (
+        let i = 0;
+        i < totalSegments;
+        i++
+    ) {
+        const segmentCenter =
+            (i + 0.5) /
+            totalSegments;
+
+        let alpha;
+
+        if (
+            segmentCenter >
+            userProgress
+        ) {
+            alpha =
+                0.1 *
+                helpTraceAlpha;
+        } else {
+            const denominator =
+                Math.max(
+                    userProgress,
+                    0.0001
+                );
+
+            alpha =
+                (
+                    0.05 +
+                    0.75 *
+                    (
+                        segmentCenter /
+                        denominator
+                    )
+                ) *
+                helpTraceAlpha;
+        }
+
+        alpha =
+            Math.max(
+                0.01,
+                Math.min(
+                    0.8 *
+                        helpTraceAlpha,
+                    alpha
+                )
+            );
+
+        const color =
+            `rgba(0, 255, 204, ${alpha})`;
+
+        ctx.strokeStyle =
+            color;
+
+        ctx.shadowColor =
+            color;
+
+        ctx.shadowBlur =
+            12 *
+            helpTraceAlpha;
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            sequence[i].x,
+            sequence[i].y
+        );
+
+        ctx.lineTo(
+            sequence[i + 1].x,
+            sequence[i + 1].y
+        );
+
+        ctx.stroke();
+    }
 
     ctx.restore();
-  });
 }
 
-function drawUserTrace() {
-  if (userTrace.length < 2) return;
+// ============================================================
+// TRACE VALIDATION
+// ============================================================
 
-  // Use streak color dynamically here:
-  const color = getStreakColor(streak);
+function distancePointToSegment(
+    px,
+    py,
+    x1,
+    y1,
+    x2,
+    y2
+) {
+    const dx =
+        x2 - x1;
 
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 7;
-  ctx.lineCap = "round";
-  ctx.shadowColor = color;
-  ctx.shadowBlur = 30;
+    const dy =
+        y2 - y1;
 
-  ctx.beginPath();
-  ctx.moveTo(userTrace[0].x, userTrace[0].y);
-  for (let i = 1; i < userTrace.length; i++) {
-    ctx.lineTo(userTrace[i].x, userTrace[i].y);
-  }
-  ctx.stroke();
+    if (
+        dx === 0 &&
+        dy === 0
+    ) {
+        return Math.hypot(
+            px - x1,
+            py - y1
+        );
+    }
 
-  ctx.shadowBlur = 0;
+    const t =
+        Math.max(
+            0,
+            Math.min(
+                1,
+                (
+                    (px - x1) * dx +
+                    (py - y1) * dy
+                ) /
+                (
+                    dx * dx +
+                    dy * dy
+                )
+            )
+        );
+
+    const closestX =
+        x1 + t * dx;
+
+    const closestY =
+        y1 + t * dy;
+
+    return Math.hypot(
+        px - closestX,
+        py - closestY
+    );
 }
 
-function distancePointToSegment(px, py, x1, y1, x2, y2) {
-  const A = px - x1;
-  const B = py - y1;
-  const C = x2 - x1;
-  const D = y2 - y1;
+// ============================================================
+// CLOSEST PATH PROGRESS
+// ============================================================
 
-  const dot = A * C + B * D;
-  const len_sq = C * C + D * D;
-  let param = -1;
-  if (len_sq !== 0) param = dot / len_sq;
+function getClosestPathProgress(point) {
+    if (
+        sequence.length < 2
+    ) {
+        return {
+            distance: Infinity,
+            progress: 0
+        };
+    }
 
-  let xx, yy;
+    let bestDistance =
+        Infinity;
 
-  if (param < 0) {
-    xx = x1;
-    yy = y1;
-  } else if (param > 1) {
-    xx = x2;
-    yy = y2;
-  } else {
-    xx = x1 + param * C;
-    yy = y1 + param * D;
-  }
+    let bestProgress = 0;
 
-  const dx = px - xx;
-  const dy = py - yy;
-  return Math.sqrt(dx * dx + dy * dy);
+    const totalSegments =
+        sequence.length - 1;
+
+    for (
+        let i = 0;
+        i < totalSegments;
+        i++
+    ) {
+        const start =
+            sequence[i];
+
+        const end =
+            sequence[i + 1];
+
+        const dx =
+            end.x -
+            start.x;
+
+        const dy =
+            end.y -
+            start.y;
+
+        const lengthSquared =
+            dx * dx +
+            dy * dy;
+
+        let t =
+            lengthSquared === 0
+                ? 0
+                : (
+                    (point.x - start.x) *
+                        dx +
+                    (point.y - start.y) *
+                        dy
+                ) /
+                lengthSquared;
+
+        t =
+            Math.max(
+                0,
+                Math.min(
+                    1,
+                    t
+                )
+            );
+
+        const closestX =
+            start.x +
+            t * dx;
+
+        const closestY =
+            start.y +
+            t * dy;
+
+        const distance =
+            Math.hypot(
+                point.x -
+                    closestX,
+                point.y -
+                    closestY
+            );
+
+        if (
+            distance <
+            bestDistance
+        ) {
+            bestDistance =
+                distance;
+
+            bestProgress =
+                (i + t) /
+                totalSegments;
+        }
+    }
+
+    return {
+        distance:
+            bestDistance,
+        progress:
+            bestProgress
+    };
 }
+
+// ============================================================
+// TRACE VALIDATION
+// ============================================================
 
 function validateUserTrace() {
-  if (userTrace.length < 2) return false;
-
-  const points = sequence;
-  let currentSegment = 0;
-
-  for (const pt of userTrace) {
-    if (currentSegment >= points.length - 1) break;
-
-    const start = points[currentSegment];
-    const end = points[currentSegment + 1];
-    const dist = distancePointToSegment(pt.x, pt.y, start.x, start.y, end.x, end.y);
-
-    if (dist > tolerance) {
-      return false;
+    if (
+        userTrace.length < 2 ||
+        sequence.length < 2
+    ) {
+        return false;
     }
 
-    const distToEnd = Math.hypot(pt.x - end.x, pt.y - end.y);
-    if (distToEnd < tolerance) {
-      currentSegment++;
+    // --------------------------------------------------------
+    // 1. START POSITION
+    // --------------------------------------------------------
+
+    const firstPoint =
+        userTrace[0];
+
+    const startPoint =
+        sequence[0];
+
+    const startDistance =
+        Math.hypot(
+            firstPoint.x -
+                startPoint.x,
+            firstPoint.y -
+                startPoint.y
+        );
+
+    if (
+        startDistance >
+        CONFIG.TRACE_TOLERANCE
+    ) {
+        return false;
     }
-  }
 
-  return currentSegment >= points.length - 1;
-}
+    // --------------------------------------------------------
+    // 2. PATH COVERAGE
+    // --------------------------------------------------------
 
-function cpuAnimateDraw() {
-  cpuPlaying = true;
-  animationProgress = 0;
-  let pulsePhase = 0;
+    let validPoints = 0;
 
-  animationSpeed = 0.004; // slowed down speed here
+    for (
+        const point of userTrace
+    ) {
+        const result =
+            getClosestPathProgress(
+                point
+            );
 
-  glowAnimating = false;
-
- function step() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  const shake = getShakeOffset();
-
-  ctx.save();
-  ctx.translate(shake.x, shake.y);
-
-  drawBackground();
-  drawStreakLines();
-
-  const pulseGlow = 15 + 10 * Math.sin(pulsePhase);
-  pulsePhase += 0.1;
-
-  const currentColor = getStreakColor(streak);
-  drawPartialPath(sequence, animationProgress, currentColor, 12, pulseGlow);
-
-  drawTimerBar();
-  displayLevel();
-
-  ctx.restore();
-
-  animationProgress += animationSpeed;
-
-  if (animationProgress <= 1) {
-    requestAnimationFrame(step);
-  } else {
-    cpuPlaying = false;
-    animationProgress = 1;
-
-    setTimeout(() => {
-      glowAnimating = true;
-      glowProgress = 0;
-      animateGlowAlongLine();
-    }, 200);
-  }
-}
-  step();
-}
-
-function animateGlowAlongLine() {
-  if (!glowAnimating) return;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawBackground();
-  drawStreakLines();
-
-  drawPartialPath(sequence, 1, "rgba(0,255,204,0.3)", 8, 10);
-
-  const totalSegments = sequence.length - 1;
-  let scaledT = glowProgress * totalSegments;
-  let segIndex = Math.floor(scaledT);
-  let segT = scaledT - segIndex;
-
-  if (segIndex >= totalSegments) segIndex = totalSegments - 1;
-
-  const start = sequence[segIndex];
-  const end = sequence[segIndex + 1];
-
-  const x = start.x + (end.x - start.x) * segT;
-  const y = start.y + (end.y - start.y) * segT;
-
-  const radius = 20;
-  const gradient = ctx.createRadialGradient(x, y, radius / 4, x, y, radius);
-  gradient.addColorStop(0, "rgba(0,255,255,0.9)");
-  gradient.addColorStop(1, "rgba(0,255,255,0)");
-
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.fill();
-
-  drawPartialPath(sequence, 1, "rgba(0,255,204,1)", 12, 20);
-
-  drawTimerBar();
-  displayLevel();
-
-  glowProgress += glowSpeed;
-  if (glowProgress > 1) glowProgress = 0;
-
-  requestAnimationFrame(animateGlowAlongLine);
-}
-
-// Draw circular timer ring urging user to trace quickly
-function drawTimerBar() {
-  if (!timerRunning) return;
-
-  const elapsed = Date.now() - timerStart;
-  const t = Math.min(elapsed / TIMER_DURATION, 1);
-
-  const centerX = canvas.width / 2;
-  const centerY = canvas.height / 2;
-  const radius = Math.min(canvas.width, canvas.height) / 3;
-
-  const startAngle = -Math.PI / 2;
-  const endAngle = startAngle + 2 * Math.PI * t;
-
-  ctx.lineWidth = 10;
-  ctx.strokeStyle = "#00ffcc";
-  ctx.shadowColor = "#00ffcc";
-  ctx.shadowBlur = 20;
-  ctx.lineJoin = "round";
-
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, radius, startAngle, endAngle);
-  ctx.stroke();
-
-  ctx.shadowBlur = 0;
-}
-
-async function onTimerEnd() {
-  timerRunning = false;
-  if (timerId) clearTimeout(timerId);
-  await flashRed();
-  resetStreak();
-  cpuAnimateDraw();
-}
-
-function resetStreak() {
-  streak = 0;
-  completedStreakLines = [];
-}
-
-function flashRed() {
-  return new Promise(resolve => {
-    let flashes = 0;
-    function flash() {
-      ctx.fillStyle = flashes % 2 === 0 ? 'rgba(255,0,0,0.5)' : 'transparent';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      flashes++;
-      if (flashes < 6) setTimeout(flash, 150);
-      else {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        resolve();
-      }
+        if (
+            result.distance <=
+            CONFIG.TRACE_TOLERANCE
+        ) {
+            validPoints++;
+        }
     }
-    flash();
-  });
+
+    const coverage =
+        validPoints /
+        userTrace.length;
+
+    if (
+        coverage <
+        CONFIG.MIN_PATH_COVERAGE
+    ) {
+        return false;
+    }
+
+    // --------------------------------------------------------
+    // 3. FORWARD PROGRESS
+    // --------------------------------------------------------
+
+    let furthestProgress = 0;
+
+    for (
+        const point of userTrace
+    ) {
+        const result =
+            getClosestPathProgress(
+                point
+            );
+
+        if (
+            result.distance <=
+            CONFIG.TRACE_TOLERANCE
+        ) {
+            furthestProgress =
+                Math.max(
+                    furthestProgress,
+                    result.progress
+                );
+        }
+    }
+
+    if (
+        furthestProgress <
+        CONFIG.MIN_PATH_PROGRESS
+    ) {
+        return false;
+    }
+
+    // --------------------------------------------------------
+    // 4. END POSITION
+    // --------------------------------------------------------
+
+    const lastPoint =
+        userTrace[
+            userTrace.length - 1
+        ];
+
+    const endPoint =
+        sequence[
+            sequence.length - 1
+        ];
+
+    const endDistance =
+        Math.hypot(
+            lastPoint.x -
+                endPoint.x,
+            lastPoint.y -
+                endPoint.y
+        );
+
+    if (
+        endDistance >
+        CONFIG.TRACE_TOLERANCE
+    ) {
+        return false;
+    }
+
+    // --------------------------------------------------------
+    // 5. BACKWARD MOVEMENT
+    // --------------------------------------------------------
+
+    let previousProgress = 0;
+    let backwardsMovement = 0;
+
+    for (
+        const point of userTrace
+    ) {
+        const result =
+            getClosestPathProgress(
+                point
+            );
+
+        if (
+            result.distance >
+            CONFIG.TRACE_TOLERANCE
+        ) {
+            continue;
+        }
+
+        if (
+            result.progress <
+            previousProgress -
+                CONFIG.MAX_BACKWARD_MOVEMENT
+        ) {
+            backwardsMovement++;
+        }
+
+        previousProgress =
+            Math.max(
+                previousProgress,
+                result.progress
+            );
+    }
+
+    if (
+        backwardsMovement >
+        Math.max(
+            3,
+            userTrace.length *
+                CONFIG.MAX_BACKWARD_EVENTS_RATIO
+        )
+    ) {
+        return false;
+    }
+
+    return true;
 }
 
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+// ============================================================
+// POINTER POSITION
+// ============================================================
+
+function getPointerPosition(event) {
+    const rect =
+        canvas.getBoundingClientRect();
+
+    return {
+        x:
+            (event.clientX -
+                rect.left) *
+            (
+                canvas.width /
+                rect.width
+            ),
+
+        y:
+            (event.clientY -
+                rect.top) *
+            (
+                canvas.height /
+                rect.height
+            )
+    };
 }
 
-function displayLevel() {
-  const fontSize = 30;
-  ctx.font = `${fontSize}px 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif`;
-  ctx.fillStyle = "#00ffcc";
-  ctx.shadowColor = "#00ffcc";
-  ctx.shadowBlur = 10;
-  ctx.fillText(`Level: ${currentLevel}`, 20, fontSize + 10);
-  ctx.shadowBlur = 0;
+// ============================================================
+// POINTER DOWN
+// ============================================================
 
-  ctx.font = "24px 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
-  const streakColor = getStreakColor(streak);
-  ctx.fillStyle = streakColor;
-  ctx.shadowColor = streakColor;
-  ctx.shadowBlur = 8;
-  ctx.fillText(`🔥 Streak: ${streak}`, 20, fontSize + 40);
-  ctx.shadowBlur = 0;
+canvas.addEventListener(
+    "pointerdown",
+    event => {
+        if (
+            gameState !==
+            GAME_STATE.READY
+        ) {
+            return;
+        }
+
+        const point =
+            getPointerPosition(
+                event
+            );
+
+        const startPoint =
+            sequence[0];
+
+        const distance =
+            Math.hypot(
+                point.x -
+                    startPoint.x,
+                point.y -
+                    startPoint.y
+            );
+
+        // ----------------------------------------------------
+        // Must begin near the start.
+        // ----------------------------------------------------
+
+        if (
+            distance >
+            CONFIG.TRACE_TOLERANCE
+        ) {
+            triggerShake(
+                CONFIG.INVALID_START_SHAKE_STRENGTH,
+                CONFIG.INVALID_START_SHAKE_DURATION
+            );
+
+            return;
+        }
+
+        pointerId =
+            event.pointerId;
+
+        try {
+            canvas.setPointerCapture(
+                pointerId
+            );
+        } catch (error) {
+            // Pointer capture is not supported
+            // in every environment.
+        }
+
+        gameState =
+            GAME_STATE.TRACING;
+
+        glowAnimating = false;
+
+        userTrace = [
+            point
+        ];
+
+        startHelpTrace();
+
+        timerStart =
+            performance.now();
+
+        timerRunning = true;
+
+        event.preventDefault();
+    }
+);
+
+// ============================================================
+// POINTER MOVE
+// ============================================================
+
+canvas.addEventListener(
+    "pointermove",
+    event => {
+        if (
+            gameState !==
+                GAME_STATE.TRACING ||
+            event.pointerId !==
+                pointerId
+        ) {
+            return;
+        }
+
+        const point =
+            getPointerPosition(
+                event
+            );
+
+        const last =
+            userTrace[
+                userTrace.length - 1
+            ];
+
+        // ----------------------------------------------------
+        // Ignore extremely small movements.
+        // ----------------------------------------------------
+
+        if (last) {
+            const distance =
+                Math.hypot(
+                    point.x -
+                        last.x,
+                    point.y -
+                        last.y
+                );
+
+            if (
+                distance <
+                CONFIG.MIN_TRACE_POINT_DISTANCE
+            ) {
+                return;
+            }
+        }
+
+        userTrace.push(point);
+
+        event.preventDefault();
+    }
+);
+
+// ============================================================
+// POINTER UP
+// ============================================================
+
+canvas.addEventListener(
+    "pointerup",
+    event => {
+        if (
+            gameState !==
+                GAME_STATE.TRACING ||
+            event.pointerId !==
+                pointerId
+        ) {
+            return;
+        }
+
+        finishTrace(true);
+
+        try {
+            canvas.releasePointerCapture(
+                event.pointerId
+            );
+        } catch (error) {
+            // Pointer capture may already be released.
+        }
+
+        pointerId = null;
+
+        event.preventDefault();
+    }
+);
+
+// ============================================================
+// POINTER CANCEL
+// ============================================================
+
+canvas.addEventListener(
+    "pointercancel",
+    event => {
+        if (
+            gameState !==
+            GAME_STATE.TRACING
+        ) {
+            return;
+        }
+
+        finishTrace(false);
+
+        try {
+            canvas.releasePointerCapture(
+                event.pointerId
+            );
+        } catch (error) {
+            // Pointer capture may already be released.
+        }
+
+        pointerId = null;
+    }
+);
+
+// ============================================================
+// TRACE COMPLETION
+// ============================================================
+
+function finishTrace(
+    checkTrace = true
+) {
+    timerRunning = false;
+
+    const successful =
+        checkTrace &&
+        validateUserTrace();
+
+    if (successful) {
+        handleSuccessfulTrace();
+    } else {
+        handleFailedTrace();
+    }
 }
 
-canvas.addEventListener("pointerdown", e => {
-  if (cpuPlaying) return;
-  glowAnimating = false;
-  tracing = true;
-  userTrace = [{ x: e.clientX, y: e.clientY }];
+// ============================================================
+// SUCCESS
+// ============================================================
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawBackground();
+function handleSuccessfulTrace() {
+    gameState =
+        GAME_STATE.SUCCESS;
 
-  helpTraceStart = Date.now();
-  helpTraceAlpha = 1;
-
-  drawFadingHelpTrace();
-  drawUserTrace();
-  displayLevel();
-
-  timerStart = Date.now();
-  timerRunning = true;
-
-  if (timerId) clearTimeout(timerId);
-  timerId = setTimeout(onTimerEnd, TIMER_DURATION);
-});
-
-canvas.addEventListener("pointermove", e => {
-  if (!tracing || cpuPlaying) return;
-  userTrace.push({ x: e.clientX, y: e.clientY });
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawBackground();
-  drawStreakLines();
-
-  drawFadingHelpTrace();
-
-  drawUserTrace();
-  displayLevel();
-  drawTimerBar();
-
-  if (timerId) clearTimeout(timerId);
-  timerId = setTimeout(onTimerEnd, TIMER_DURATION);
-});
-
-canvas.addEventListener("pointerup", async e => {
-  if (!tracing || cpuPlaying) return;
-
-  tracing = false;
-
-  timerRunning = false;
-  if (timerId) clearTimeout(timerId);
-
-  if (validateUserTrace()) {
     streak++;
 
     completedStreakLines.push({
-      points: [...sequence],
-      color: getStreakColor(streak),
-      fadeStart: null,
-      fadeProgress: 0,
+        points: [
+            ...sequence
+        ],
+
+        color:
+            getStreakColor(
+                streak
+            ),
+
+        fadeStart: null,
+
+        fadeProgress: 0
     });
 
-    await animateShimmer();
-    await fadeOutSequence();
+    successAnimationStart =
+        performance.now();
 
-    completedStreakLines[completedStreakLines.length - 1].fadeStart = Date.now();
+    successAnimationProgress = 0;
 
-    currentLevel++;
-    if (currentLevel > maxLines) currentLevel = maxLines;
-    sequence = fullSequence.slice(0, currentLevel + 1);
+    triggerShake(
+        CONFIG.SUCCESS_SHAKE_STRENGTH,
+        CONFIG.SUCCESS_SHAKE_DURATION
+    );
 
-   setTimeout(() => {
-  drawBackground(); // instead of clearing to black
+    const session =
+        gameSessionId;
 
-  ctx.font = "40px Arial";
-  ctx.fillStyle = "#00ffcc";
-  ctx.textAlign = "center";
-  ctx.fillText("Next Level...", canvas.width / 2, canvas.height / 2);
+    // --------------------------------------------------------
+    // Begin fading the completed line.
+    // --------------------------------------------------------
 
-  setTimeout(() => {
-    cpuAnimateDraw();
-  }, 1500);
+    setTimeout(() => {
+        if (
+            session !==
+            gameSessionId
+        ) {
+            return;
+        }
 
-}, 300);
-  }
-});
-async function animateShimmer() {
-  const steps = 60;
-  const interval = 20;
+        const last =
+            completedStreakLines[
+                completedStreakLines.length - 1
+            ];
 
-  for (let i = 0; i <= steps; i++) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawBackground();
-    drawPartialPath(sequence, 1, "rgba(0,255,204,0.3)");
+        if (last) {
+            last.fadeStart =
+                performance.now();
+        }
+    }, CONFIG.SUCCESS_FADE_DURATION);
 
-    const t = i / steps;
-    drawShimmerAt(t);
+    // --------------------------------------------------------
+    // Schedule next level.
+    // --------------------------------------------------------
 
-    await delay(interval);
-  }
+    nextLevelTime =
+        performance.now() +
+        CONFIG.NEXT_LEVEL_DELAY;
 }
+
+// ============================================================
+// FAILURE
+// ============================================================
+
+function handleFailedTrace() {
+    gameState =
+        GAME_STATE.FAILED;
+
+    timerRunning = false;
+
+    resetStreak();
+
+    failureFlash = 1;
+
+    triggerShake(
+        CONFIG.FAILURE_SHAKE_STRENGTH,
+        CONFIG.FAILURE_SHAKE_DURATION
+    );
+
+    const session =
+        gameSessionId;
+
+    setTimeout(() => {
+        if (
+            session !==
+            gameSessionId
+        ) {
+            return;
+        }
+
+        if (
+            gameState ===
+            GAME_STATE.FAILED
+        ) {
+            startCpuDemo();
+        }
+    }, CONFIG.FAILURE_RECOVERY_DELAY);
+}
+
+// ============================================================
+// SUCCESS ANIMATION
+// ============================================================
+
+function updateSuccessAnimation(now) {
+    const elapsed =
+        now -
+        successAnimationStart;
+
+    successAnimationProgress =
+        Math.min(
+            elapsed /
+                CONFIG.SHIMMER_DURATION,
+            1
+        );
+}
+
+function drawSuccessState() {
+    const color =
+        getStreakColor(
+            streak
+        );
+
+    drawPartialPath(
+        sequence,
+        1,
+        "rgba(0, 255, 204, 0.25)",
+        8,
+        10
+    );
+
+    drawPartialPath(
+        sequence,
+        1,
+        color,
+        10,
+        20
+    );
+
+    drawShimmerAt(
+        successAnimationProgress
+    );
+
+    if (
+        successAnimationProgress >= 1
+    ) {
+        ctx.save();
+
+        ctx.textAlign =
+            "center";
+
+        ctx.font =
+            "40px 'Segoe UI', Arial, sans-serif";
+
+        ctx.fillStyle =
+            "#00ffcc";
+
+        ctx.shadowColor =
+            "#00ffcc";
+
+        ctx.shadowBlur = 15;
+
+        ctx.fillText(
+            currentLevel >=
+                CONFIG.MAX_LEVEL
+                ? "YOU WIN!"
+                : "NEXT LEVEL...",
+            canvas.width / 2,
+            canvas.height / 2
+        );
+
+        ctx.restore();
+    }
+}
+
+// ============================================================
+// SUCCESS SHIMMER
+// ============================================================
 
 function drawShimmerAt(t) {
-  if (sequence.length < 2) return;
+    if (
+        sequence.length < 2
+    ) {
+        return;
+    }
 
-  const totalSegments = sequence.length - 1;
-  let scaledT = t * totalSegments;
-  let segIndex = Math.floor(scaledT);
-  let segT = scaledT - segIndex;
+    const totalSegments =
+        sequence.length - 1;
 
-  if (segIndex >= totalSegments) segIndex = totalSegments - 1;
+    const scaledT =
+        t *
+        totalSegments;
 
-  const start = sequence[segIndex];
-  const end = sequence[segIndex + 1];
+    let segmentIndex =
+        Math.floor(
+            scaledT
+        );
 
-  const x = start.x + (end.x - start.x) * segT;
-  const y = start.y + (end.y - start.y) * segT;
+    let segmentProgress =
+        scaledT -
+        segmentIndex;
 
-  const radius = 25;
-  const gradient = ctx.createRadialGradient(x, y, radius / 4, x, y, radius);
-  gradient.addColorStop(0, "rgba(255,255,255,0.9)");
-  gradient.addColorStop(1, "rgba(255,255,255,0)");
+    if (
+        segmentIndex >=
+        totalSegments
+    ) {
+        segmentIndex =
+            totalSegments - 1;
 
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.fill();
+        segmentProgress = 1;
+    }
+
+    const start =
+        sequence[
+            segmentIndex
+        ];
+
+    const end =
+        sequence[
+            segmentIndex + 1
+        ];
+
+    const x =
+        start.x +
+        (end.x - start.x) *
+        segmentProgress;
+
+    const y =
+        start.y +
+        (end.y - start.y) *
+        segmentProgress;
+
+    const radius = 25;
+
+    const gradient =
+        ctx.createRadialGradient(
+            x,
+            y,
+            radius / 4,
+            x,
+            y,
+            radius
+        );
+
+    gradient.addColorStop(
+        0,
+        "rgba(255, 255, 255, 0.95)"
+    );
+
+    gradient.addColorStop(
+        1,
+        "rgba(255, 255, 255, 0)"
+    );
+
+    ctx.save();
+
+    ctx.fillStyle =
+        gradient;
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x,
+        y,
+        radius,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.restore();
 }
 
-async function fadeOutSequence() {
-  const steps = 30;
-  for (let i = steps; i >= 0; i--) {
-    const alpha = i / steps;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawBackground();
-    drawStreakLines();
-    drawPartialPath(sequence, 1, `rgba(0,255,204,${alpha})`, 8, 15);
-    await delay(16);
-  }
+// ============================================================
+// TIMER
+// ============================================================
+
+function updateTimer(now) {
+    if (!timerRunning) {
+        return;
+    }
+
+    const elapsed =
+        now -
+        timerStart;
+
+    if (
+        elapsed >=
+        CONFIG.TIMER_DURATION
+    ) {
+        timerRunning = false;
+
+        handleTimerEnd();
+    }
 }
+
+function getTimerProgress() {
+    if (!timerRunning) {
+        return 0;
+    }
+
+    const elapsed =
+        performance.now() -
+        timerStart;
+
+    return Math.max(
+        0,
+        Math.min(
+            1,
+            1 -
+                elapsed /
+                    CONFIG.TIMER_DURATION
+        )
+    );
+}
+
+// ============================================================
+// TIMER RING
+// ============================================================
+
+function drawTimerRing() {
+    if (
+        gameState !==
+            GAME_STATE.TRACING ||
+        !timerRunning
+    ) {
+        return;
+    }
+
+    const remaining =
+        getTimerProgress();
+
+    const centerX =
+        canvas.width / 2;
+
+    const centerY =
+        canvas.height / 2;
+
+    const radius =
+        Math.min(
+            canvas.width,
+            canvas.height
+        ) / 3;
+
+    const startAngle =
+        -Math.PI / 2;
+
+    const endAngle =
+        startAngle +
+        Math.PI *
+            2 *
+            remaining;
+
+    let color =
+        "#00ffcc";
+
+    if (
+        remaining <= 0.33
+    ) {
+        color = "#ff3333";
+    } else if (
+        remaining <= 0.66
+    ) {
+        color = "#ffd700";
+    }
+
+    ctx.save();
+
+    ctx.lineWidth = 10;
+
+    ctx.strokeStyle =
+        color;
+
+    ctx.shadowColor =
+        color;
+
+    ctx.shadowBlur = 20;
+
+    ctx.lineCap =
+        "round";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        centerX,
+        centerY,
+        radius,
+        startAngle,
+        endAngle,
+        false
+    );
+
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+// ============================================================
+// TIMER FAILURE
+// ============================================================
+
+function handleTimerEnd() {
+    gameState =
+        GAME_STATE.FAILED;
+
+    resetStreak();
+
+    failureFlash = 1;
+
+    triggerShake(
+        14,
+        350
+    );
+
+    const session =
+        gameSessionId;
+
+    setTimeout(() => {
+        if (
+            session !==
+            gameSessionId
+        ) {
+            return;
+        }
+
+        if (
+            gameState ===
+            GAME_STATE.FAILED
+        ) {
+            startCpuDemo();
+        }
+    }, CONFIG.FAILURE_RECOVERY_DELAY);
+}
+
+// ============================================================
+// STREAK LINES
+// ============================================================
+
+function updateStreakFades(now) {
+    completedStreakLines =
+        completedStreakLines.filter(
+            line => {
+                if (
+                    line.fadeStart ===
+                    null
+                ) {
+                    return true;
+                }
+
+                const elapsed =
+                    now -
+                    line.fadeStart;
+
+                line.fadeProgress =
+                    Math.min(
+                        elapsed /
+                            CONFIG.STREAK_LINE_FADE_DURATION,
+                        1
+                    );
+
+                return (
+                    line.fadeProgress <
+                    1
+                );
+            }
+        );
+}
+
+function drawStreakLines() {
+    completedStreakLines.forEach(
+        line => {
+            const fadeProgress =
+                line.fadeStart ===
+                null
+                    ? 0
+                    : line.fadeProgress;
+
+            const alpha =
+                1 -
+                fadeProgress;
+
+            const shrinkFactor =
+                1 -
+                fadeProgress *
+                    0.7;
+
+            const color =
+                dimColor(
+                    line.color,
+                    0.4,
+                    alpha
+                );
+
+            ctx.save();
+
+            ctx.translate(
+                canvas.width / 2,
+                canvas.height / 2
+            );
+
+            ctx.scale(
+                shrinkFactor,
+                shrinkFactor
+            );
+
+            ctx.translate(
+                -canvas.width / 2,
+                -canvas.height / 2
+            );
+
+            drawPartialPath(
+                line.points,
+                1,
+                color,
+                4,
+                8
+            );
+
+            ctx.restore();
+        }
+    );
+}
+
+// ============================================================
+// SHAKE
+// ============================================================
+
+function triggerShake(
+    strength = 12,
+    duration = 300
+) {
+    shakeStrength =
+        strength;
+
+    shakeDuration =
+        duration;
+
+    shakeTime =
+        duration;
+}
+
+function updateShake(deltaTime) {
+    if (
+        shakeTime <= 0
+    ) {
+        shakeTime = 0;
+        return;
+    }
+
+    shakeTime -=
+        deltaTime *
+        1000;
+
+    if (
+        shakeTime < 0
+    ) {
+        shakeTime = 0;
+    }
+}
+
+function getShakeOffset() {
+    if (
+        shakeTime <= 0
+    ) {
+        return {
+            x: 0,
+            y: 0
+        };
+    }
+
+    const intensity =
+        shakeDuration > 0
+            ? shakeTime /
+              shakeDuration
+            : 1;
+
+    return {
+        x:
+            (
+                Math.random() -
+                0.5
+            ) *
+            shakeStrength *
+            intensity,
+
+        y:
+            (
+                Math.random() -
+                0.5
+            ) *
+            shakeStrength *
+            intensity
+    };
+}
+
+// ============================================================
+// FAILURE FLASH
+// ============================================================
+
+function updateFailureFlash(
+    deltaTime
+) {
+    if (
+        failureFlash <= 0
+    ) {
+        return;
+    }
+
+    failureFlash -=
+        deltaTime *
+        3.5;
+
+    failureFlash =
+        Math.max(
+            0,
+            failureFlash
+        );
+}
+
+function drawFailureFlash() {
+    if (
+        failureFlash <= 0
+    ) {
+        return;
+    }
+
+    ctx.save();
+
+    ctx.fillStyle =
+        `rgba(255, 0, 0, ${
+            failureFlash * 0.5
+        })`;
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    ctx.restore();
+}
+
+// ============================================================
+// UI
+// ============================================================
+
+function drawUI() {
+    const fontSize = 30;
+
+    ctx.save();
+
+    // --------------------------------------------------------
+    // LEVEL
+    // --------------------------------------------------------
+
+    ctx.font =
+        `${fontSize}px 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif`;
+
+    ctx.fillStyle =
+        "#00ffcc";
+
+    ctx.shadowColor =
+        "#00ffcc";
+
+    ctx.shadowBlur = 10;
+
+    ctx.fillText(
+        `Level: ${currentLevel}`,
+        CONFIG.UI_MARGIN,
+        fontSize +
+            CONFIG.UI_MARGIN
+    );
+
+    // --------------------------------------------------------
+    // STREAK
+    // --------------------------------------------------------
+
+    ctx.font =
+        "24px 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+
+    const streakColor =
+        getStreakColor(
+            streak
+        );
+
+    ctx.fillStyle =
+        streakColor;
+
+    ctx.shadowColor =
+        streakColor;
+
+    ctx.shadowBlur = 8;
+
+    ctx.fillText(
+        `🔥 Streak: ${streak}`,
+        CONFIG.UI_MARGIN,
+        fontSize +
+            40
+    );
+
+    ctx.shadowBlur = 0;
+
+    // --------------------------------------------------------
+    // READY MESSAGE
+    // --------------------------------------------------------
+
+    if (
+        gameState ===
+        GAME_STATE.READY
+    ) {
+        drawReadyText();
+    }
+
+    ctx.restore();
+}
+
+// ============================================================
+// READY TEXT
+// ============================================================
+
+function drawReadyText() {
+    ctx.save();
+
+    ctx.textAlign =
+        "center";
+
+    ctx.font =
+        "20px 'Segoe UI', Arial, sans-serif";
+
+    ctx.fillStyle =
+        "rgba(255, 255, 255, 0.65)";
+
+    ctx.fillText(
+        "Trace the pattern",
+        canvas.width / 2,
+        canvas.height - 40
+    );
+
+    ctx.restore();
+}
+
+// ============================================================
+// FAILURE STATE
+// ============================================================
+
+function drawFailureState() {
+    drawPartialPath(
+        sequence,
+        1,
+        "rgba(255, 60, 60, 0.35)",
+        8,
+        12
+    );
+}
+
+// ============================================================
+// COMPLETE GAME
+// ============================================================
+
+function drawCompleteGame() {
+    const pulse =
+        0.75 +
+        Math.sin(
+            performance.now() *
+                0.004
+        ) *
+            0.25;
+
+    ctx.save();
+
+    ctx.textAlign =
+        "center";
+
+    // --------------------------------------------------------
+    // WIN TITLE
+    // --------------------------------------------------------
+
+    ctx.font =
+        "64px 'Segoe UI', Arial, sans-serif";
+
+    ctx.fillStyle =
+        `rgba(255, 0, 255, ${pulse})`;
+
+    ctx.shadowColor =
+        "#ff00ff";
+
+    ctx.shadowBlur = 30;
+
+    ctx.fillText(
+        "YOU WIN!",
+        canvas.width / 2,
+        canvas.height / 2
+    );
+
+    // --------------------------------------------------------
+    // FINAL STREAK
+    // --------------------------------------------------------
+
+    ctx.font =
+        "28px 'Segoe UI', Arial, sans-serif";
+
+    ctx.fillStyle =
+        "#00ffcc";
+
+    ctx.shadowColor =
+        "#00ffcc";
+
+    ctx.shadowBlur = 12;
+
+    ctx.fillText(
+        `Final Streak: ${streak}`,
+        canvas.width / 2,
+        canvas.height / 2 + 55
+    );
+
+    // --------------------------------------------------------
+    // COMPLETION MESSAGE
+    // --------------------------------------------------------
+
+    ctx.font =
+        "20px 'Segoe UI', Arial, sans-serif";
+
+    ctx.fillStyle =
+        "rgba(255, 255, 255, 0.65)";
+
+    ctx.shadowBlur = 0;
+
+    ctx.fillText(
+        "All levels completed",
+        canvas.width / 2,
+        canvas.height / 2 + 95
+    );
+
+    ctx.restore();
+}
+
+// ============================================================
+// STREAK / RESET
+// ============================================================
+
+function resetStreak() {
+    streak = 0;
+
+    completedStreakLines = [];
+}
+
+// ============================================================
+// GAME INITIALIZATION
+// ============================================================
 
 function init() {
-  currentLevel = 1;
-  streak = 0;
-  completedStreakLines = [];
+    currentLevel = 1;
 
-  fullSequence = generateSequence(maxLines);
-  sequence = fullSequence.slice(0, currentLevel + 1);
+    streak = 0;
 
-  cpuPlaying = true; // CPU is playing animation first
+    userTrace = [];
 
-  cpuAnimateDraw();
+    completedStreakLines = [];
+
+    timerRunning = false;
+
+    pointerId = null;
+
+    failureFlash = 0;
+
+    shakeTime = 0;
+
+    nextLevelTime = 0;
+
+    gameSessionId++;
+
+    // --------------------------------------------------------
+    // Generate the complete 10-level path once.
+    // --------------------------------------------------------
+
+    fullSequence =
+        generateSequence(
+            CONFIG.MAX_LEVEL
+        );
+
+    // --------------------------------------------------------
+    // Only reveal level 1 initially.
+    // --------------------------------------------------------
+
+    sequence =
+        fullSequence.slice(
+            0,
+            currentLevel + 1
+        );
+
+    gameState =
+        GAME_STATE.DEMO;
+
+    startCpuDemo();
 }
+
+// ============================================================
+// START GAME
+// ============================================================
+
+resize();
+
+init();
+
+requestAnimationFrame(
+    gameLoop
+);
