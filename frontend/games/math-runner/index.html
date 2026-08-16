@@ -1,0 +1,492 @@
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  >
+
+  <meta
+    name="description"
+    content="Math Space Shooter - solve math problems, destroy enemy ships, build combos, and survive the waves."
+  >
+
+  <meta
+    name="theme-color"
+    content="#030515"
+  >
+
+  <title>Math Space Shooter</title>
+
+
+  <!-- =========================================================
+       GOOGLE ADSENSE
+       Monetization
+       ========================================================= -->
+
+  <script
+    async
+    src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7708023438338001"
+    crossorigin="anonymous">
+  </script>
+
+
+  <!-- =========================================================
+       GAME STYLES
+       Keep all visual UI styling inside styles.css
+       ========================================================= -->
+
+  <link
+    rel="stylesheet"
+    href="styles.css"
+  >
+
+</head>
+
+
+<body>
+
+
+  <!-- =========================================================
+       PAGE / GAME WRAPPER
+       ========================================================= -->
+
+  <div id="gamePage">
+
+
+    <!-- =======================================================
+         TOP AD
+         Keeps monetization separate from gameplay
+         ======================================================= -->
+
+    <div
+      id="top-ad-container"
+      class="ad-container"
+      aria-label="Advertisement"
+    >
+
+      <ins
+        class="adsbygoogle"
+        style="display:block"
+        data-ad-client="ca-pub-7708023438338001"
+        data-ad-slot="9146349585"
+        data-ad-format="auto"
+        data-full-width-responsive="true">
+      </ins>
+
+    </div>
+
+
+    <!-- =======================================================
+         MAIN MENU
+         Blocks gameplay until PLAY is pressed
+         ======================================================= -->
+
+    <div
+      id="menu"
+      class="menu-overlay"
+    >
+
+      <!-- Space background effects -->
+
+      <div class="space-background">
+
+        <div class="space-orb orb-one"></div>
+
+        <div class="space-orb orb-two"></div>
+
+        <div class="space-orb orb-three"></div>
+
+        <div class="stars"></div>
+
+      </div>
+
+
+      <!-- =====================================================
+           TITLE
+           ===================================================== -->
+
+      <div class="title-wrap">
+
+        <div class="game-icon">
+          🚀
+        </div>
+
+        <h1>
+          MATH SPACE
+        </h1>
+
+        <h2>
+          SHOOTER
+        </h2>
+
+        <p>
+          Solve the math. Destroy the enemy.
+        </p>
+
+      </div>
+
+
+      <!-- =====================================================
+           GAME DESCRIPTION
+           ===================================================== -->
+
+      <div class="game-description">
+
+        <div class="description-item">
+
+          <span class="description-icon">
+            🧮
+          </span>
+
+          <span>
+            Solve the problem
+          </span>
+
+        </div>
+
+
+        <div class="description-item">
+
+          <span class="description-icon">
+            🎯
+          </span>
+
+          <span>
+            Shoot the correct answer
+          </span>
+
+        </div>
+
+
+        <div class="description-item">
+
+          <span class="description-icon">
+            🔥
+          </span>
+
+          <span>
+            Build your combo
+          </span>
+
+        </div>
+
+      </div>
+
+
+      <!-- =====================================================
+           PLAY BUTTON
+           ===================================================== -->
+
+      <button
+        id="playButton"
+        class="play"
+        type="button"
+        onclick="startGame()"
+      >
+
+        <span class="play-icon">
+          ▶
+        </span>
+
+        <span>
+          PLAY
+        </span>
+
+      </button>
+
+
+      <!-- =====================================================
+           CONTROLS
+           ===================================================== -->
+
+      <div class="controls">
+
+        <div class="control-title">
+          CONTROLS
+        </div>
+
+        <div class="control-row">
+
+          <span>
+            WASD / ARROWS
+          </span>
+
+          <span>
+            MOVE
+          </span>
+
+        </div>
+
+        <div class="control-row">
+
+          <span>
+            SPACE
+          </span>
+
+          <span>
+            FIRE
+          </span>
+
+        </div>
+
+        <div class="control-row">
+
+          <span>
+            P
+          </span>
+
+          <span>
+            PAUSE
+          </span>
+
+        </div>
+
+      </div>
+
+
+      <!-- =====================================================
+           VERSION
+           ===================================================== -->
+
+      <div class="version">
+        MATH SPACE SHOOTER • v1.0
+      </div>
+
+    </div>
+
+
+    <!-- =======================================================
+         GAME CANVAS
+         game.js renders the entire game here
+         ======================================================= -->
+
+    <main
+      id="game-container"
+      aria-label="Math Space Shooter game"
+    >
+
+      <canvas
+        id="gameCanvas"
+        aria-label="Math Space Shooter game canvas"
+      >
+      </canvas>
+
+    </main>
+
+
+    <!-- =======================================================
+         BOTTOM AD
+         Monetization area
+         ======================================================= -->
+
+    <div
+      id="ad-container"
+      class="ad-container"
+      aria-label="Advertisement"
+    >
+
+      <ins
+        class="adsbygoogle"
+        style="display:block"
+        data-ad-client="ca-pub-7708023438338001"
+        data-ad-slot="9146349585"
+        data-ad-format="auto"
+        data-full-width-responsive="true">
+      </ins>
+
+    </div>
+
+
+  </div>
+
+
+  <!-- =========================================================
+       INITIALIZE ADS
+       Must happen after the ad containers exist
+       ========================================================= -->
+
+  <script>
+
+    (adsbygoogle = window.adsbygoogle || []).push({});
+
+    (adsbygoogle = window.adsbygoogle || []).push({});
+
+  </script>
+
+
+  <!-- =========================================================
+       GAME ENGINE
+       This is your game.js
+       ========================================================= -->
+
+  <script src="game.js"></script>
+
+
+  <!-- =========================================================
+       MENU / GAME START CONTROLLER
+       ========================================================= -->
+
+  <script>
+
+    let gameStarted = false;
+
+
+    // =========================================================
+    // START GAME
+    // =========================================================
+
+    function startGame() {
+
+      if (gameStarted) {
+        return;
+      }
+
+
+      gameStarted = true;
+
+
+      const menu =
+        document.getElementById("menu");
+
+
+      const playButton =
+        document.getElementById("playButton");
+
+
+      // Prevent double-clicks
+
+      if (playButton) {
+
+        playButton.disabled = true;
+
+      }
+
+
+      // Smooth menu transition
+
+      if (menu) {
+
+        menu.style.transition =
+          "opacity .35s ease, transform .35s ease";
+
+        menu.style.opacity =
+          "0";
+
+        menu.style.transform =
+          "scale(1.04)";
+
+      }
+
+
+      // Remove menu after animation
+
+      setTimeout(() => {
+
+        if (menu) {
+
+          menu.style.display =
+            "none";
+
+        }
+
+      }, 350);
+
+    }
+
+
+    // =========================================================
+    // PREVENT GAME INPUT BEFORE START
+    // =========================================================
+
+    window.addEventListener(
+      "DOMContentLoaded",
+      () => {
+
+        const canvas =
+          document.getElementById(
+            "gameCanvas"
+          );
+
+
+        if (!canvas) {
+
+          console.error(
+            "[MathSpaceShooter] gameCanvas was not found."
+          );
+
+          return;
+
+        }
+
+
+        canvas.addEventListener(
+          "pointerdown",
+          (event) => {
+
+            if (!gameStarted) {
+
+              event.preventDefault();
+
+            }
+
+          }
+        );
+
+      }
+    );
+
+
+    // =========================================================
+    // ENTER KEY STARTS GAME
+    // =========================================================
+
+    window.addEventListener(
+      "keydown",
+      (event) => {
+
+        if (
+          event.key === "Enter" &&
+          !gameStarted
+        ) {
+
+          startGame();
+
+        }
+
+      }
+    );
+
+
+    // =========================================================
+    // ESCAPE DOES NOT RELOAD PAGE
+    // =========================================================
+
+    window.addEventListener(
+      "keydown",
+      (event) => {
+
+        if (
+          event.key === "Escape"
+        ) {
+
+          event.preventDefault();
+
+        }
+
+      }
+    );
+
+  </script>
+
+
+</body>
+
+</html>
+```

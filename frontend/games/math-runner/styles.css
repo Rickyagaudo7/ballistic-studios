@@ -1,0 +1,1170 @@
+
+/* ============================================================
+   MATH SPACE SHOOTER
+   styles.css
+   ============================================================ */
+
+
+/* ============================================================
+   GLOBAL RESET
+   ============================================================ */
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+
+  overflow: hidden;
+
+  background:
+    #02030d;
+
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+
+  color: #ffffff;
+}
+
+
+/* ============================================================
+   BODY
+   ============================================================ */
+
+body {
+  position: relative;
+
+  user-select: none;
+
+  overscroll-behavior: none;
+}
+
+
+/* ============================================================
+   GAME PAGE
+   ============================================================ */
+
+#gamePage {
+  position: fixed;
+
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  overflow: hidden;
+
+  background:
+    #02030d;
+}
+
+
+/* ============================================================
+   GAME CONTAINER
+   ============================================================ */
+
+#game-container {
+  position: fixed;
+
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  overflow: hidden;
+
+  background:
+    #02030d;
+
+  z-index: 1;
+}
+
+
+/* ============================================================
+   CANVAS
+   ============================================================ */
+
+canvas {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  touch-action: none;
+
+  user-select: none;
+
+  -webkit-user-select: none;
+}
+
+
+#gameCanvas {
+  position: fixed;
+
+  top: 0;
+  left: 0;
+
+  width: 100%;
+  height: 100%;
+
+  z-index: 1;
+
+  pointer-events: auto;
+
+  outline: none;
+}
+
+
+/* ============================================================
+   MAIN MENU OVERLAY
+   ============================================================ */
+
+#menu {
+  position: fixed;
+
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  display: flex;
+
+  flex-direction: column;
+
+  justify-content: center;
+
+  align-items: center;
+
+  overflow: hidden;
+
+  z-index: 999999;
+
+  background:
+    radial-gradient(
+      circle at 50% 45%,
+      rgba(20, 50, 120, 0.25),
+      transparent 35%
+    ),
+
+    radial-gradient(
+      circle at 20% 80%,
+      rgba(0, 150, 255, 0.12),
+      transparent 35%
+    ),
+
+    radial-gradient(
+      circle at 80% 20%,
+      rgba(80, 0, 255, 0.12),
+      transparent 35%
+    ),
+
+    #02030d;
+}
+
+
+/* ============================================================
+   SPACE BACKGROUND
+   ============================================================ */
+
+.space-background {
+  position: absolute;
+
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  overflow: hidden;
+
+  pointer-events: none;
+}
+
+
+/* ============================================================
+   SPACE ORBS
+   ============================================================ */
+
+.space-orb {
+  position: absolute;
+
+  border-radius: 50%;
+
+  pointer-events: none;
+
+  filter: blur(70px);
+
+  opacity: 0.6;
+}
+
+
+/* Orb 1 */
+
+.orb-one {
+  width: 500px;
+  height: 500px;
+
+  left: -180px;
+  top: -150px;
+
+  background:
+    radial-gradient(
+      circle,
+      rgba(45, 110, 255, 0.30),
+      transparent 68%
+    );
+
+  animation:
+    orbFloatOne 9s ease-in-out infinite;
+}
+
+
+/* Orb 2 */
+
+.orb-two {
+  width: 600px;
+  height: 600px;
+
+  right: -250px;
+  bottom: -220px;
+
+  background:
+    radial-gradient(
+      circle,
+      rgba(100, 40, 255, 0.22),
+      transparent 68%
+    );
+
+  animation:
+    orbFloatTwo 11s ease-in-out infinite;
+}
+
+
+/* Orb 3 */
+
+.orb-three {
+  width: 350px;
+  height: 350px;
+
+  left: 50%;
+  top: 15%;
+
+  transform: translateX(-50%);
+
+  background:
+    radial-gradient(
+      circle,
+      rgba(0, 220, 255, 0.10),
+      transparent 70%
+    );
+
+  animation:
+    orbPulse 6s ease-in-out infinite;
+}
+
+
+/* ============================================================
+   ORB ANIMATIONS
+   ============================================================ */
+
+@keyframes orbFloatOne {
+
+  0%,
+  100% {
+    transform:
+      translate(0, 0)
+      scale(1);
+  }
+
+  50% {
+    transform:
+      translate(80px, 50px)
+      scale(1.12);
+  }
+}
+
+
+@keyframes orbFloatTwo {
+
+  0%,
+  100% {
+    transform:
+      translate(0, 0)
+      scale(1);
+  }
+
+  50% {
+    transform:
+      translate(-70px, -60px)
+      scale(1.1);
+  }
+}
+
+
+@keyframes orbPulse {
+
+  0%,
+  100% {
+    opacity: 0.35;
+
+    transform:
+      translateX(-50%)
+      scale(1);
+  }
+
+  50% {
+    opacity: 0.7;
+
+    transform:
+      translateX(-50%)
+      scale(1.18);
+  }
+}
+
+
+/* ============================================================
+   STAR FIELD
+   ============================================================ */
+
+.stars {
+  position: absolute;
+
+  inset: 0;
+
+  opacity: 0.65;
+
+  background-image:
+
+    radial-gradient(
+      circle,
+      rgba(255, 255, 255, 0.8) 1px,
+      transparent 1px
+    ),
+
+    radial-gradient(
+      circle,
+      rgba(120, 200, 255, 0.5) 1px,
+      transparent 1px
+    );
+
+  background-size:
+    90px 90px,
+    150px 150px;
+
+  background-position:
+    0 0,
+    40px 70px;
+
+  animation:
+    starsMove 18s linear infinite;
+}
+
+
+@keyframes starsMove {
+
+  from {
+    background-position:
+      0 0,
+      40px 70px;
+  }
+
+  to {
+    background-position:
+      0 900px,
+      40px 970px;
+  }
+}
+
+
+/* ============================================================
+   TITLE WRAPPER
+   ============================================================ */
+
+.title-wrap {
+  position: relative;
+
+  z-index: 10;
+
+  text-align: center;
+
+  animation:
+    fadeIn 0.9s ease-out;
+}
+
+
+/* ============================================================
+   GAME ICON
+   ============================================================ */
+
+.game-icon {
+  display: flex;
+
+  justify-content: center;
+
+  align-items: center;
+
+  width: 82px;
+  height: 82px;
+
+  margin:
+    0 auto 15px;
+
+  border-radius: 24px;
+
+  font-size: 44px;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(50, 120, 255, 0.30),
+      rgba(0, 220, 255, 0.08)
+    );
+
+  border:
+    1px solid
+    rgba(80, 200, 255, 0.35);
+
+  box-shadow:
+    0 0 35px
+    rgba(30, 170, 255, 0.20),
+
+    inset 0 0 25px
+    rgba(50, 150, 255, 0.08);
+
+  animation:
+    iconFloat 3s ease-in-out infinite;
+}
+
+
+@keyframes iconFloat {
+
+  0%,
+  100% {
+    transform:
+      translateY(0);
+  }
+
+  50% {
+    transform:
+      translateY(-7px);
+  }
+}
+
+
+/* ============================================================
+   TITLE
+   ============================================================ */
+
+.title-wrap h1 {
+  margin: 0;
+
+  font-size:
+    clamp(42px, 7vw, 78px);
+
+  line-height: 0.95;
+
+  font-weight: 900;
+
+  letter-spacing:
+    5px;
+
+  color:
+    #ffffff;
+
+  text-shadow:
+
+    0 0 10px
+    rgba(80, 210, 255, 0.9),
+
+    0 0 35px
+    rgba(30, 130, 255, 0.55);
+}
+
+
+.title-wrap h2 {
+  margin:
+    5px 0 14px;
+
+  font-size:
+    clamp(22px, 3vw, 34px);
+
+  letter-spacing:
+    10px;
+
+  font-weight:
+    800;
+
+  color:
+    #4bdfff;
+
+  text-shadow:
+    0 0 18px
+    rgba(50, 210, 255, 0.8);
+}
+
+
+.title-wrap p {
+  margin:
+    0;
+
+  color:
+    rgba(220, 235, 255, 0.62);
+
+  font-size:
+    16px;
+
+  letter-spacing:
+    1px;
+}
+
+
+/* ============================================================
+   GAME DESCRIPTION
+   ============================================================ */
+
+.game-description {
+  position: relative;
+
+  z-index: 10;
+
+  display: flex;
+
+  justify-content: center;
+
+  align-items: center;
+
+  gap: 28px;
+
+  margin-top: 32px;
+
+  padding:
+    12px 20px;
+
+  border-radius: 14px;
+
+  background:
+    rgba(5, 12, 35, 0.55);
+
+  border:
+    1px solid
+    rgba(100, 180, 255, 0.12);
+
+  backdrop-filter:
+    blur(10px);
+
+  -webkit-backdrop-filter:
+    blur(10px);
+}
+
+
+/* ============================================================
+   DESCRIPTION ITEMS
+   ============================================================ */
+
+.description-item {
+  display: flex;
+
+  align-items: center;
+
+  gap: 8px;
+
+  color:
+    rgba(220, 230, 255, 0.72);
+
+  font-size:
+    12px;
+
+  letter-spacing:
+    0.5px;
+
+  white-space:
+    nowrap;
+}
+
+
+.description-icon {
+  font-size:
+    17px;
+}
+
+
+/* ============================================================
+   PLAY BUTTON
+   ============================================================ */
+
+.play {
+  position: relative;
+
+  z-index: 20;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  gap: 12px;
+
+  margin-top: 30px;
+
+  min-width: 220px;
+
+  padding:
+    17px 45px;
+
+  border:
+    1px solid
+    rgba(160, 240, 255, 0.65);
+
+  border-radius:
+    15px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #55e7ff,
+      #2477ff
+    );
+
+  color:
+    #ffffff;
+
+  font-size:
+    19px;
+
+  font-weight:
+    900;
+
+  letter-spacing:
+    2px;
+
+  cursor:
+    pointer;
+
+  box-shadow:
+
+    0 0 20px
+    rgba(50, 180, 255, 0.35),
+
+    0 0 60px
+    rgba(30, 100, 255, 0.18);
+
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
+}
+
+
+.play:hover {
+  transform:
+    translateY(-3px)
+    scale(1.035);
+
+  filter:
+    brightness(1.08);
+
+  box-shadow:
+
+    0 0 30px
+    rgba(50, 210, 255, 0.55),
+
+    0 0 80px
+    rgba(40, 110, 255, 0.25);
+}
+
+
+.play:active {
+  transform:
+    translateY(1px)
+    scale(0.97);
+}
+
+
+.play:disabled {
+  cursor:
+    default;
+
+  opacity:
+    0.7;
+}
+
+
+.play-icon {
+  font-size:
+    16px;
+}
+
+
+/* ============================================================
+   CONTROLS PANEL
+   ============================================================ */
+
+.controls {
+  position: relative;
+
+  z-index: 10;
+
+  width:
+    min(310px, 90vw);
+
+  margin-top:
+    28px;
+
+  padding:
+    14px 18px;
+
+  border-radius:
+    14px;
+
+  background:
+    rgba(3, 8, 25, 0.60);
+
+  border:
+    1px solid
+    rgba(100, 180, 255, 0.12);
+
+  backdrop-filter:
+    blur(10px);
+
+  -webkit-backdrop-filter:
+    blur(10px);
+}
+
+
+/* ============================================================
+   CONTROL TITLE
+   ============================================================ */
+
+.control-title {
+  margin-bottom:
+    8px;
+
+  text-align:
+    center;
+
+  font-size:
+    10px;
+
+  font-weight:
+    900;
+
+  letter-spacing:
+    3px;
+
+  color:
+    rgba(100, 215, 255, 0.7);
+}
+
+
+/* ============================================================
+   CONTROL ROW
+   ============================================================ */
+
+.control-row {
+  display:
+    flex;
+
+  justify-content:
+    space-between;
+
+  align-items:
+    center;
+
+  padding:
+    5px 0;
+
+  font-size:
+    11px;
+
+  color:
+    rgba(210, 220, 245, 0.62);
+}
+
+
+.control-row span:first-child {
+  color:
+    rgba(255, 255, 255, 0.9);
+
+  font-weight:
+    700;
+
+  letter-spacing:
+    1px;
+}
+
+
+.control-row span:last-child {
+  color:
+    rgba(130, 150, 190, 0.7);
+}
+
+
+/* ============================================================
+   VERSION
+   ============================================================ */
+
+.version {
+  position:
+    absolute;
+
+  bottom:
+    18px;
+
+  z-index:
+    10;
+
+  font-size:
+    9px;
+
+  letter-spacing:
+    3px;
+
+  color:
+    rgba(180, 200, 235, 0.25);
+}
+
+
+/* ============================================================
+   FADE IN
+   ============================================================ */
+
+@keyframes fadeIn {
+
+  from {
+    opacity:
+      0;
+
+    transform:
+      translateY(25px);
+  }
+
+  to {
+    opacity:
+      1;
+
+    transform:
+      translateY(0);
+  }
+}
+
+
+/* ============================================================
+   ADS
+   ============================================================ */
+
+.ad-container {
+  position:
+    fixed;
+
+  left:
+    0;
+
+  width:
+    100%;
+
+  display:
+    flex;
+
+  justify-content:
+    center;
+
+  align-items:
+    center;
+
+  overflow:
+    hidden;
+
+  background:
+    rgba(0, 0, 0, 0.55);
+
+  z-index:
+    5000;
+}
+
+
+/* ============================================================
+   TOP AD
+   ============================================================ */
+
+#top-ad-container {
+  top:
+    0;
+
+  min-height:
+    50px;
+
+  max-height:
+    100px;
+}
+
+
+/* ============================================================
+   BOTTOM AD
+   ============================================================ */
+
+#ad-container {
+  bottom:
+    0;
+
+  min-height:
+    50px;
+
+  max-height:
+    100px;
+}
+
+
+/* ============================================================
+   ADSENSE ELEMENT
+   ============================================================ */
+
+.adsbygoogle {
+  display:
+    block;
+
+  width:
+    100%;
+
+  max-width:
+    970px;
+
+  min-height:
+    50px;
+}
+
+
+/* ============================================================
+   MOBILE
+   ============================================================ */
+
+@media (max-width: 700px) {
+
+  .title-wrap h1 {
+    letter-spacing:
+      3px;
+  }
+
+
+  .title-wrap h2 {
+    letter-spacing:
+      6px;
+  }
+
+
+  .title-wrap p {
+    font-size:
+      14px;
+  }
+
+
+  .game-icon {
+    width:
+      68px;
+
+    height:
+      68px;
+
+    font-size:
+      36px;
+  }
+
+
+  .game-description {
+    gap:
+      12px;
+
+    margin-top:
+      24px;
+
+    padding:
+      10px 12px;
+  }
+
+
+  .description-item {
+    font-size:
+      9px;
+
+    flex-direction:
+      column;
+
+    gap:
+      4px;
+
+    text-align:
+      center;
+  }
+
+
+  .description-icon {
+    font-size:
+      15px;
+  }
+
+
+  .play {
+    min-width:
+      190px;
+
+    padding:
+      15px 35px;
+  }
+
+
+  .controls {
+    margin-top:
+      22px;
+  }
+
+
+  .version {
+    bottom:
+      10px;
+  }
+}
+
+
+/* ============================================================
+   SMALL MOBILE
+   ============================================================ */
+
+@media (max-width: 430px) {
+
+  .game-description {
+    width:
+      90vw;
+
+    justify-content:
+      space-around;
+
+    gap:
+      4px;
+  }
+
+
+  .title-wrap h1 {
+    font-size:
+      38px;
+  }
+
+
+  .title-wrap h2 {
+    font-size:
+      20px;
+
+    letter-spacing:
+      5px;
+  }
+
+
+  .title-wrap p {
+    font-size:
+      12px;
+  }
+
+
+  .controls {
+    width:
+      82vw;
+  }
+}
+
+
+/* ============================================================
+   LANDSCAPE MOBILE
+   ============================================================ */
+
+@media (
+  max-height: 600px
+) and (
+  orientation: landscape
+) {
+
+  .game-icon {
+    display:
+      none;
+  }
+
+
+  .title-wrap h1 {
+    font-size:
+      34px;
+  }
+
+
+  .title-wrap h2 {
+    font-size:
+      18px;
+
+    margin-bottom:
+      6px;
+  }
+
+
+  .title-wrap p {
+    font-size:
+      11px;
+  }
+
+
+  .game-description {
+    margin-top:
+      12px;
+
+    padding:
+      7px 15px;
+  }
+
+
+  .play {
+    margin-top:
+      12px;
+
+    padding:
+      11px 40px;
+  }
+
+
+  .controls {
+    display:
+      none;
+  }
+
+
+  .version {
+    bottom:
+      5px;
+  }
+}
+
+
+/* ============================================================
+   REDUCED MOTION ACCESSIBILITY
+   ============================================================ */
+
+@media (
+  prefers-reduced-motion: reduce
+) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration:
+      0.01ms !important;
+
+    animation-iteration-count:
+      1 !important;
+
+    transition-duration:
+      0.01ms !important;
+  }
+}
